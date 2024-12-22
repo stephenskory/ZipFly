@@ -49,7 +49,7 @@ class ZipFly(ZipBase):
         for file in self.files:
             chunk = self._make_cdir_file_header(file)
             chunk += self._make_zip64_extra_field(file)
-            self._cdir_size = len(chunk)
+            self._cdir_size += len(chunk)
             self._add_offset(len(chunk))
 
             yield chunk

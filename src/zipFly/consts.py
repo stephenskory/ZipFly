@@ -2,7 +2,8 @@ from collections import namedtuple
 import struct
 # is crc okay?
 # version needed to extract?
-
+# offsets
+# sizes in cdir structure
 
 # ZIP CONSTANTS
 ZIP64_VERSION = 45
