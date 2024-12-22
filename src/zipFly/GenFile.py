@@ -1,6 +1,6 @@
 import time
 from typing import Generator, AsyncGenerator, Union
-from zipFly.BaseFile import BaseFile
+from .BaseFile import BaseFile
 
 
 class GenFile(BaseFile):
@@ -16,14 +16,14 @@ class GenFile(BaseFile):
         if isinstance(self.generator, Generator):
             yield from self.generator
         else:
-            raise ValueError("self.generator must be of type Generator")
+            raise ValueError(f"generator must be of type Generator, not '{type(self.generator)}'")
 
     async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:
         if isinstance(self.generator, AsyncGenerator):
             async for chunk in self.generator:
                 yield chunk
         else:
-            raise ValueError("self.generator must be of type AsyncIterator")
+            raise ValueError(f"generator must be of type AsyncIterator, not '{type(self.generator)}'")
 
     @property
     def name(self) -> str:

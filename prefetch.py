@@ -1,4 +1,5 @@
-from typing import Generator, AsyncGenerator
+import asyncio
+from typing import Generator, AsyncGenerator, List
 
 from .BaseFile import BaseFile
 from .ZipBase import ZipBase
@@ -69,25 +70,48 @@ class ZipFly(ZipBase):
 
         yield self._make_data_descriptor(file)
 
-    async def async_stream(self) -> AsyncGenerator[bytes, None]:
-        # stream files
-        for file in self.files:
-
+    async def _prefetch_files(self, files: List[BaseFile], queue: asyncio.Queue):
+        """
+        Prefetch file data and put it in an async queue for streaming.
+        """
+        for file in files:
+            # Mark the offset for the current file
             file.offset = self._get_offset()
+            # Stream the file's data asynchronously
             async for chunk in self._async_stream_single_file(file):
                 self._add_offset(len(chunk))
-                yield chunk
+                await queue.put(chunk)
+            # Signal end of file stream
+            await queue.put(None)
 
-        # stream zip structures
+
+    async def async_stream(self) -> AsyncGenerator[bytes, None]:
+        """
+        Asynchronously stream all files with prefetching and buffering.
+        """
+        queue = asyncio.Queue(maxsize=100)  # Limit buffer size to control memory usage
+
+        # Start prefetching files in the background
+        prefetch_task = asyncio.create_task(self._prefetch_files(self.files, queue))
+
+        # Stream from the queue
+        while True:
+            chunk = await queue.get()
+            if chunk is None:  # End of a file or all files
+                if queue.empty():
+                    break
+                continue
+            yield chunk
+            queue.task_done()
+
+        # Stream zip end structures
         for chunk in self._make_end_structures():
             yield chunk
 
     def stream(self) -> Generator[bytes, None, None]:
         # stream files
         for file in self.files:
-
             file.offset = self._get_offset()
-
             for chunk in self._stream_single_file(file):
                 self._add_offset(len(chunk))
                 yield chunk

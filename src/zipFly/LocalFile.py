@@ -1,11 +1,19 @@
 import os
 import time
 from typing import Generator, AsyncGenerator
-from zipFly.BaseFile import BaseFile
+from .BaseFile import BaseFile
 
 import aiofiles
 
 class LocalFile(BaseFile):
+
+    def __init__(self, file_path: str, name: str = None, compression_method: int = None):
+        if not os.path.isfile(file_path):
+            raise ValueError(f"{file_path} is not a correct file path.")
+        self._file_path = file_path
+        self.chunk_size = 1048
+        self._name = name if name else file_path
+        super().__init__(compression_method)
 
     async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:
 
@@ -15,14 +23,6 @@ class LocalFile(BaseFile):
                 if not part:
                     break
                 yield part
-
-    def __init__(self, file_path: str, name: str = None, compression_method: int = None):
-        if not os.path.isfile(file_path):
-            raise ValueError(f"{file_path} is not a correct file path.")
-        self._file_path = file_path
-        self.chunk_size = 1048
-        self._name = name if name else file_path
-        super().__init__(compression_method)
 
     def _generate_file_data(self) -> Generator[bytes, None, None]:
         with open(self._file_path, 'rb') as file:

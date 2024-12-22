@@ -2,31 +2,40 @@
 
 <a href="http://forthebadge.com/"><img src="https://forthebadge.com/images/badges/0-percent-optimized.svg" alt="forthebadge"/></a>
 <a href="http://forthebadge.com/"><img src="https://forthebadge.com/images/badges/gluten-free.png" alt="forthebadge"/></a>
- <a href="http://forthebadge.com/"><img src="https://web.archive.org/web/20230604002050/https://forthebadge.com/images/badges/mom-made-pizza-rolls.svg" alt="forthebadge"/></a>
+<a href="http://forthebadge.com/"><img src="https://web.archive.org/web/20230604002050/https://forthebadge.com/images/badges/mom-made-pizza-rolls.svg" alt="forthebadge"/></a>
 
 <img src="https://img.shields.io/badge/ZIP64-Certified-lightGreen" alt="Build Status"/>
 <img src="https://img.shields.io/badge/build-failing-red" alt="Build Status"/>
 <img src="https://img.shields.io/badge/made with-hate-orange" alt="Build Status"/>
 <img src="https://img.shields.io/badge/fuck-zip-green" alt="Build Status"/>
 
-### ZipFly is a library for creating & streaming ZIP64 archives "on the fly"
 
-**It allows to create/fetch file content dynamically while the archive is streamed.**
+**Python library to construct a ZIP64 archive on the fly 
+without having to store the entire ZIP in 
+memory or disk. This is useful in memory-constrained environments, or when you would like to start 
+returning compressed data before you've even retrieved all the uncompressed data. 
+Generating ZIPs on-demand in a web server is a typical use case for zipFly.**
+
 
 - No temporary files, data is streamed directly
-- Support for **async* interface 
-- Ability to calculate archive size before streaming even begins
-- Supported `deflate` compression method
+- Support for **async** interface 
+- Calculates archive size before streaming even begins
+- Supports `deflate` compression method
 - Small memory usage, streaming is done using yield statement
 - Archive structure is created on the fly, and all data can be created during stream
 - Files included into archive can be generated on the fly using Python generators
 - **Independent of the goofy 🤮🤮 python's standard ZipFile implementation**
-- No dependencies
+- Only 1 dependency
 - Automatic detection and changing of duplicate names
 - `Zip64` format compatible files
 
 
 This library is based upon [this library](https://github.com/kbbdy/zipstream) <sub>_(this library was a piece of work...)_<sub>
+
+## How to install
+    pip install zipfly64
+
+https://pypi.org/project/zipFly64
 
 ## Usage
 
@@ -98,7 +107,7 @@ asyncio.run(save_zip_async())
 ### Other
 I created this library for my I Drive project.
 
-If you have a different case scenario, and LocalFile and GenFile are not enough, you can extend BaseFile and everything else should work out of the box.
+If you have a different use case scenario, and LocalFile and GenFile are not enough, you can extend BaseFile and everything else should work out of the box.
 
 
 

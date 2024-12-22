@@ -1,5 +1,8 @@
 from collections import namedtuple
 import struct
+# is crc okay?
+# version needed to extract?
+
 
 # ZIP CONSTANTS
 ZIP64_VERSION = 45
@@ -16,7 +19,7 @@ LOCAL_FILE_HEADER_SIGNATURE = b'\x50\x4b\x03\x04'
 LOCAL_FILE_HEADER_STRUCT = struct.Struct(b"<4sHHHHHLLLHH")
 LOCAL_FILE_HEADER_TUPLE = namedtuple("fileheader",
                                      ("signature", "version_to_extract", "flags",
-                                      "compression", "mod_time", "mod_date",
+                                      "compression_method", "mod_time", "mod_date",
                                       "crc", "uncompressed_size", "compressed_size",
                                       "file_name_len", "extra_field_len"))
 
@@ -24,7 +27,7 @@ LOCAL_FILE_HEADER_TUPLE = namedtuple("fileheader",
 # FILE DESCRIPTOR
 ZIP64_DATA_DESCRIPTOR_SIGNATURE = b'\x50\x4b\x07\x08'
 ZIP64_DATA_DESCRIPTOR_STRUCT = struct.Struct(b"<4sLQQ")
-ZIP64_DATA_DESCRIPTOR_TUPLE = namedtuple("filecrc", ("signature", "crc", "compressed_size", "uncompressed_size"))
+ZIP64_DATA_DESCRIPTOR_TUPLE = namedtuple("filedescriptor", ("signature", "crc", "compressed_size", "uncompressed_size"))
 
 
 # CENTRAL DIRECTORY FILE HEADER
@@ -32,7 +35,7 @@ CENTRAL_DIR_FILE_HEADER_SIGNATURE = b'\x50\x4b\x01\x02'
 CENTRAL_DIR_FILE_HEADER_STRUCT = struct.Struct(b"<4sHHHHHHLLLHHHHHLL")
 CENTRAL_DIR_FILE_HEADER_TUPLE = namedtuple("cdfileheader",
                                            ("signature", "version_made_by", "version_to_extract", "flags",
-                                            "compression", "mod_time", "mod_date", "crc",
+                                            "compression_method", "mod_time", "mod_date", "crc",
                                             "compressed_size", "uncompressed_size", "file_name_len", "extra_field_len",
                                             "file_comment_len", "disk_start", "internal_file_attr", "external_file_attr", "offset"))
 

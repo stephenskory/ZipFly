@@ -1,8 +1,8 @@
 from collections import defaultdict
 from typing import List
 
-from zipFly import consts
-from zipFly.BaseFile import BaseFile
+from . import consts
+from .BaseFile import BaseFile
 
 """
 Since the Official ZIP docs are terrible, here's a detailed structure of the zip this library builds. (pretty sure mine's just as bad lol)
@@ -94,7 +94,7 @@ class ZipBase:
         self.__offset = 0  # Tracks the current offset within the ZIP archive
         self._cdir_size = 0
         self._offset_to_start_of_central_dir = 0
-        self.__version_made_by = 0x0345  # UNIX and ZIP version 45
+        self.__version_made_by = 0x0A45  # Windows and ZIP version 45
 
     def _make_local_file_header(self, file: BaseFile) -> bytes:
         """
@@ -105,12 +105,12 @@ class ZipBase:
             "signature": consts.LOCAL_FILE_HEADER_SIGNATURE,
             "version_to_extract": self.__version_to_extract,
             "flags": file.flags,
-            "compression": file.compression_method,
+            "compression_method": file.compression_method,
             "mod_time": file.get_mod_time(),
             "mod_date": file.get_mod_date(),
-            "crc": 0xFFFFFFFF,  # Placeholder (will be updated in data descriptor)
-            "uncompressed_size": 0xFFFFFFFF,  # Placeholder (will be updated in data descriptor)
-            "compressed_size": 0xFFFFFFFF,  # Placeholder (will be updated in data descriptor)
+            "crc": 0,  # Correct value will be provided in data descriptor after we get all file data
+            "uncompressed_size": 0,  # Correct value will be provided in data descriptor after we get all file data
+            "compressed_size": 0,  # Correct value will be provided in data descriptor after we get all file data
             "file_name_len": len(file.file_path_bytes),
             "extra_field_len": 0  # 0 cuz no extra field is used with local file header
         }
@@ -127,9 +127,11 @@ class ZipBase:
         Create data descriptor.  (4.3.9)
         """
 
+        print("crc")
+        print(file.crc)
         fields = {
             "signature": consts.ZIP64_DATA_DESCRIPTOR_SIGNATURE,
-            "crc": file.crc & 0xffffffff,  # hack for making CRC unsigned long
+            "crc": file.crc,  #& 0xFFFFFFF,  # hack for making CRC unsigned long
             "uncompressed_size": file.original_size,
             "compressed_size": file.compressed_size,
         }
@@ -148,7 +150,7 @@ class ZipBase:
             "version_made_by": self.__version_made_by,
             "version_to_extract": self.__version_to_extract,
             "flags": file.flags,
-            "compression": file.compression_method,
+            "compression_method": file.compression_method,
             "mod_time": file.get_mod_time(),
             "mod_date": file.get_mod_date(),
             "crc": file.crc,
@@ -173,6 +175,10 @@ class ZipBase:
         """
         Create the ZIP64 extra field.  (4.5.3)
         """
+        print(file.original_size)
+        print(file.compressed_size)
+        print(file.offset)
+
         fields = {
             "signature": consts.ZIP64_EXTRA_FIELD_SIGNATURE,
             "extra_field_size": 24,
@@ -249,8 +255,6 @@ class ZipBase:
         self.__offset += value
 
     def _get_offset(self) -> int:
+        print("get offset")
+        print(self.__offset)
         return self.__offset
-
-
-
-
