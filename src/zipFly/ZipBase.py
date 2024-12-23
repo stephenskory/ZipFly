@@ -127,11 +127,9 @@ class ZipBase:
         Create data descriptor.  (4.3.9)
         """
 
-        print("crc")
-        print(file.crc)
         fields = {
             "signature": consts.ZIP64_DATA_DESCRIPTOR_SIGNATURE,
-            "crc": file.crc,  #& 0xFFFFFFF,  # hack for making CRC unsigned long
+            "crc": file.crc,  # hack for making CRC unsigned long
             "uncompressed_size": file.original_size,
             "compressed_size": file.compressed_size,
         }
@@ -175,9 +173,6 @@ class ZipBase:
         """
         Create the ZIP64 extra field.  (4.5.3)
         """
-        print(file.original_size)
-        print(file.compressed_size)
-        print(file.offset)
 
         fields = {
             "signature": consts.ZIP64_EXTRA_FIELD_SIGNATURE,
@@ -255,6 +250,4 @@ class ZipBase:
         self.__offset += value
 
     def _get_offset(self) -> int:
-        print("get offset")
-        print(self.__offset)
         return self.__offset

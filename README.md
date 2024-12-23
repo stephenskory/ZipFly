@@ -105,6 +105,9 @@ asyncio.run(save_zip_async())
 ```
 
 ### Other
+Python is not optimized for async I/O operations, thus to speed up the async streaming the chunk_size is changed to 4MB, you can override this by passing chunksize as argument to LocalFile.
+
+
 I created this library for my I Drive project.
 
 If you have a different use case scenario, and LocalFile and GenFile are not enough, you can extend BaseFile and everything else should work out of the box.

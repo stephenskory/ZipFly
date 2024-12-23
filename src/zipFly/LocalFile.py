@@ -7,16 +7,17 @@ import aiofiles
 
 class LocalFile(BaseFile):
 
-    def __init__(self, file_path: str, name: str = None, compression_method: int = None):
+    def __init__(self, file_path: str, name: str = None, compression_method: int = None, chunk_size=None):
         if not os.path.isfile(file_path):
             raise ValueError(f"{file_path} is not a correct file path.")
         self._file_path = file_path
-        self.chunk_size = 1048
+        self.chunk_size = chunk_size
         self._name = name if name else file_path
         super().__init__(compression_method)
 
     async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:
-
+        if not self.chunk_size:
+            self.chunk_size = 1048 * 1048 * 4
         async with aiofiles.open(self._file_path, "rb") as fh:
             while True:
                 part = await fh.read(self.chunk_size)
@@ -25,6 +26,9 @@ class LocalFile(BaseFile):
                 yield part
 
     def _generate_file_data(self) -> Generator[bytes, None, None]:
+        if not self.chunk_size:
+            self.chunk_size = 1048 * 16
+
         with open(self._file_path, 'rb') as file:
             while True:
                 chunk = file.read(self.chunk_size)
