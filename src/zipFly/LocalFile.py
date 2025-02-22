@@ -1,7 +1,9 @@
 import os
 import time
+import zlib
 from typing import Generator, AsyncGenerator
 from .BaseFile import BaseFile
+import binascii
 
 import aiofiles
 
@@ -46,18 +48,15 @@ class LocalFile(BaseFile):
 
     @property
     def modification_time(self) -> float:
+        """Returns the modification time as a Unix timestamp"""
         return os.path.getmtime(self._file_path)
-
-    def get_mod_time(self) -> int:
-        # Extract hours, minutes, and seconds from the modification time
-        t = time.localtime(self.modification_time)
-        return ((t.tm_hour << 11) | (t.tm_min << 5) | (t.tm_sec // 2)) & 0xFFFF
-
-    def get_mod_date(self) -> int:
-        # Extract year, month, and day from the modification time
-        t = time.localtime(self.modification_time)
-        year = t.tm_year - 1980  # ZIP format years start from 1980
-        return ((year << 9) | (t.tm_mon << 5) | t.tm_mday) & 0xFFFF
 
     def set_file_name(self, new_name: str) -> None:
         self._name = new_name
+
+    def calculate_crc(self) -> int:
+        crc = 0
+        with open(self._file_path, "rb") as f:
+            while chunk := f.read(self.chunk_size):
+                crc = zlib.crc32(chunk, crc)
+        return crc & 0xFFFFFFFF

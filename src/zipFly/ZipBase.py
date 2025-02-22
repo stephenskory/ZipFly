@@ -1,3 +1,5 @@
+import copy
+import types
 from collections import defaultdict
 from typing import List
 
@@ -61,7 +63,7 @@ I hope, that i made it a bit more clear to anyone reading, including future me.
 """
 
 
-def process_file_names(files):
+def process_file_names(files) -> list[BaseFile]:
     name_counts = defaultdict(int)
     for file in files:
         # Split the name into base and extension
@@ -82,13 +84,41 @@ def process_file_names(files):
     return files
 
 
+def deepcopy_skip_generators(obj_list):
+    """
+    Deep copies a list of objects while skipping generator attributes.
+    """
+
+    def custom_copy(obj, memo=None):
+        if memo is None:
+            memo = {}
+
+        if isinstance(obj, dict):
+            return {k: custom_copy(v, memo) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple, set)):
+            return type(obj)(custom_copy(item, memo) for item in obj)
+        elif isinstance(obj, (int, float, str, bool, type(None))):  # Immutable types
+            return obj
+        elif isinstance(obj, (types.GeneratorType, types.AsyncGeneratorType)):  # Skip generators
+            return obj
+        elif hasattr(obj, '__dict__'):  # Handle custom objects
+            new_obj = copy.copy(obj)  # Shallow copy first
+            for key, value in obj.__dict__.items():
+                setattr(new_obj, key, custom_copy(value, memo))
+            return new_obj
+        else:
+            return copy.deepcopy(obj, memo)  # Default deep copy
+
+    return [custom_copy(obj) for obj in obj_list]
+
+
 class ZipBase:
 
     def __init__(self, files: List[BaseFile]):
         self.__version_to_extract = 45
 
         # process file names to make sure there are no duplicates
-        processed_files = process_file_names(files)
+        processed_files = process_file_names(deepcopy_skip_generators(files))
         self.files = processed_files
 
         self.__offset = 0  # Tracks the current offset within the ZIP archive
@@ -100,7 +130,6 @@ class ZipBase:
         """
         Create local file header for a ZIP64 archive   (4.3.7)
         """
-
         fields = {
             "signature": consts.LOCAL_FILE_HEADER_SIGNATURE,
             "version_to_extract": self.__version_to_extract,
@@ -126,12 +155,11 @@ class ZipBase:
         """
         Create data descriptor.  (4.3.9)
         """
-
         fields = {
             "signature": consts.ZIP64_DATA_DESCRIPTOR_SIGNATURE,
-            "crc": file.crc,  # hack for making CRC unsigned long
-            "uncompressed_size": file.original_size,
-            "compressed_size": file.compressed_size,
+            "crc": file.get_crc(),
+            "uncompressed_size": file.size,
+            "compressed_size": file.get_compressed_size(),
         }
 
         descriptor = consts.ZIP64_DATA_DESCRIPTOR_TUPLE(**fields)
@@ -151,7 +179,7 @@ class ZipBase:
             "compression_method": file.compression_method,
             "mod_time": file.get_mod_time(),
             "mod_date": file.get_mod_date(),
-            "crc": file.crc,
+            "crc": file.get_crc(),
             "compressed_size": 0xFFFFFFFF,  # Placeholder (will be updated in zip64 extra field)
             "uncompressed_size": 0xFFFFFFFF,  # Placeholder (will be updated in zip64 extra field)
             "file_name_len": len(file.file_path_bytes),
@@ -166,20 +194,20 @@ class ZipBase:
         cdfh = consts.CENTRAL_DIR_FILE_HEADER_TUPLE(**fields)
         cdfh = consts.CENTRAL_DIR_FILE_HEADER_STRUCT.pack(*cdfh)
         cdfh += file.file_path_bytes
-
         return cdfh
 
     def _make_zip64_extra_field(self, file: BaseFile) -> bytes:
         """
         Create the ZIP64 extra field.  (4.5.3)
         """
+        offset = file.get_offset()
 
         fields = {
             "signature": consts.ZIP64_EXTRA_FIELD_SIGNATURE,
             "extra_field_size": 24,
-            "size": file.original_size,
-            "compressed_size": file.compressed_size,
-            "offset": file.offset,
+            "size": file.size,
+            "compressed_size": file.get_compressed_size(),
+            "offset": offset,
         }
 
         extra = consts.ZIP64_EXTRA_FIELD_TUPLE(**fields)
@@ -206,13 +234,13 @@ class ZipBase:
 
         cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_TUPLE(**fields)
         cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_STRUCT.pack(*cdend)
-
         return cdend
 
     def _make_zip64_end_of_cdir_locator(self) -> bytes:
         """
         Create the ZIP64 end of central directory locator.  (4.3.15)
         """
+
         fields = {
             "signature": consts.ZIP64_END_OF_CENTRAL_DIR_LOCATOR_SIGNATURE,
             "disk_with_zip64_end": 0,
@@ -246,7 +274,11 @@ class ZipBase:
 
         return eocd
 
+    def _set_offset(self, value: int) -> None:
+        self.__offset = value
+
     def _add_offset(self, value: int) -> None:
+
         self.__offset += value
 
     def _get_offset(self) -> int:

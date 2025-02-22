@@ -55,6 +55,8 @@ with open("out/file.zip", 'wb') as f_out:
     for chunk in zipFly.stream():
         f_out.write(chunk)
 ```
+> [!CAUTION]
+> You mustn't reuse `ZipFly` instances. They should be re-created everytime you call `stream()` or `async_stream()`
 
 ### Supports dynamically created files
 ```py
@@ -68,7 +70,7 @@ def file_generator():
     
 # size is optional, it allows to calculate the total size of the archive before any data is generated
 # modification_time in epoch time, defaults to time.time()
-file1 = GenFile(name="file.txt", generator=file_generator(), modification_time=time.time(), size=size, compression_method=consts.COMPRESSION_DEFLATE)
+file1 = GenFile(name="file.txt", generator=lambda: file_generator(), modification_time=time.time(), size=size, compression_method=consts.COMPRESSION_DEFLATE)
 file2 = LocalFile(file_path='files/as61aade2ebfd.mp4', compression_method=consts.NO_COMPRESSION) #  or consts.COMPRESSION_DEFLATE 
 
 files = [file1, file2]
@@ -88,8 +90,7 @@ for chunk in zipFly.stream():
 ```py
 import asyncio
 from zipFly import ZipFly, LocalFile, consts, GenFile
-# file_generator must be async! Local file async streaming is done with aiofiles library
-file1 = GenFile(name="file.txt", generator=file_generator())
+file1 = GenFile(name="file.txt", generator=lambda: file_generator())
 file2 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")
 
 files = [file1, file2]
@@ -103,6 +104,56 @@ async def save_zip_async():
 
 asyncio.run(save_zip_async())
 ```
+> [!NOTE]  
+> file_generator must be async. Local file async streaming is done with aiofiles library.
+
+
+## Byte offset mode
+> [!TIP]
+> Use this with Byte Range header to allow for resumable zip streaming
+
+This mode allows to start generating archive from offset. It finds the file within that offset and starts streaming from it. Sadly it must fetch the entire file as otherwise a correct crc cannot be calculated.
+If you use `LocalFile` then it's not a problem as it can very fast go tru the entire local file and calculate crc. However, if u use a `GenFile` it still has to fetch the entire file with may take a while depending on the file's size.
+
+```py
+
+file1 = GenFile(name="file.txt", generator=lambda: file_generator(), crc=crc)
+file2 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")
+files = [file1, file2]
+
+zipFly1 = ZipFly(files)
+zipFly2 = ZipFly(files)
+
+# Simulating pause/resume
+STOP_BYTE = 300
+async def async_save_pause():
+    byte_offset = 0
+    with open("out/file.zip", 'wb') as f_out:
+        async for chunk in zipFly1.async_stream():
+            remaining_bytes = STOP_BYTE - byte_offset
+            if len(chunk) > remaining_bytes:
+                chunk = chunk[:remaining_bytes]
+            f_out.write(chunk)
+            byte_offset += len(chunk)
+            if byte_offset >= STOP_BYTE:
+                break
+            
+async def async_save_resume():
+    with open("out/file.zip", 'ab') as f_out: # Append mode
+        async for chunk in zipFly2.async_stream(byte_offset=STOP_BYTE):
+            f_out.write(chunk)
+
+async def pause_resume_save():
+    await async_save_pause()
+    await async_save_resume()
+
+asyncio.run(pause_resume_save())
+```
+If resume ZipFly instance has diffrent files than pause ZipFly instance there will be a corrupted Zip file generated
+
+> [!NOTE]  
+> For byte offset mode to work you must use `const.NO_COMPRESSION` and specify `crc` for `GenFile`
+
 
 ### Other
 Python is not optimized for async I/O operations, thus to speed up the async streaming the chunk_size is changed to 4MB, you can override this by passing chunksize as argument to LocalFile.
