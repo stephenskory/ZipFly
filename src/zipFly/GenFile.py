@@ -1,11 +1,11 @@
 import time
-from typing import Generator, AsyncGenerator, Callable
+from typing import Generator, AsyncGenerator, Union
 from .BaseFile import BaseFile
 
 
 class GenFile(BaseFile):
 
-    def __init__(self, name: str, generator: Callable, compression_method: int = None, modification_time: float = None, size: int = None, crc: int = None):
+    def __init__(self, name: str, generator: Union[Generator[bytes, None, None], AsyncGenerator[bytes, None]], compression_method: int = None, modification_time: float = None, size: int = None, crc: int = None):
         super().__init__(compression_method)
         self._name = name
         self._generator_func = generator
@@ -15,7 +15,7 @@ class GenFile(BaseFile):
 
     def _get_generator(self):
         """Return a new generator instance every time this is called."""
-        return self._generator_func()
+        return self._generator_func
 
     def _generate_file_data(self) -> Generator[bytes, None, None]:
         generator = self._get_generator()

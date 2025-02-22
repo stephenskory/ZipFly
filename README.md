@@ -70,7 +70,7 @@ def file_generator():
     
 # size is optional, it allows to calculate the total size of the archive before any data is generated
 # modification_time in epoch time, defaults to time.time()
-file1 = GenFile(name="file.txt", generator=lambda: file_generator(), modification_time=time.time(), size=size, compression_method=consts.COMPRESSION_DEFLATE)
+file1 = GenFile(name="file.txt", generator=file_generator(), modification_time=time.time(), size=size, compression_method=consts.COMPRESSION_DEFLATE)
 file2 = LocalFile(file_path='files/as61aade2ebfd.mp4', compression_method=consts.NO_COMPRESSION) #  or consts.COMPRESSION_DEFLATE 
 
 files = [file1, file2]
@@ -90,7 +90,7 @@ for chunk in zipFly.stream():
 ```py
 import asyncio
 from zipFly import ZipFly, LocalFile, consts, GenFile
-file1 = GenFile(name="file.txt", generator=lambda: file_generator())
+file1 = GenFile(name="file.txt", generator=file_generator())
 file2 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")
 
 files = [file1, file2]
@@ -117,12 +117,10 @@ If you use `LocalFile` then it's not a problem as it can very fast go tru the en
 
 ```py
 
-file1 = GenFile(name="file.txt", generator=lambda: file_generator(), crc=crc)
+file1 = GenFile(name="file.txt", generator=file_generator(), crc=crc)
 file2 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")
-files = [file1, file2]
-
-zipFly1 = ZipFly(files)
-zipFly2 = ZipFly(files)
+files1 = [file1, file2]
+zipFly1 = ZipFly(files1)
 
 # Simulating pause/resume
 STOP_BYTE = 300
@@ -137,7 +135,13 @@ async def async_save_pause():
             byte_offset += len(chunk)
             if byte_offset >= STOP_BYTE:
                 break
-            
+                
+# Later...                
+file3 = GenFile(name="file.txt", generator=file_generator(), crc=crc)
+file4 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")
+files2 = [file3, file4]
+zipFly2 = ZipFly(files2)
+
 async def async_save_resume():
     with open("out/file.zip", 'ab') as f_out: # Append mode
         async for chunk in zipFly2.async_stream(byte_offset=STOP_BYTE):
