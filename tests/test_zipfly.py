@@ -210,5 +210,7 @@ def test_multifile_archive() -> None:
                 # before any failed asserts might leave some junk
                 outs.append(tfp.read())
 
+    Path.unlink(fp.name)
+
     for out in outs:
         assert lorem_ipsum == out
