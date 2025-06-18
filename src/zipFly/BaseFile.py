@@ -57,9 +57,9 @@ class BaseFile(ABC):
             chunk = compressor.process(chunk)
             if len(chunk) > 0:
                 yield chunk
-            chunk = compressor.tail()
-            if len(chunk) > 0:
-                yield chunk
+        chunk = compressor.tail()
+        if len(chunk) > 0:
+            yield chunk
 
     def get_mod_time(self) -> int:
         # Extract hours, minutes, and seconds from the modification time
