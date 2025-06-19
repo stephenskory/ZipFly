@@ -63,7 +63,7 @@ exclude = [
     "venv",
 ]
 
-line-length = 80
+line-length = 190
 indent-width = 4
 
 # Assume Python 3.9

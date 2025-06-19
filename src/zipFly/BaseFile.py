@@ -13,18 +13,14 @@ class BaseFile(ABC):
         self.__offset = 0  # Offset to local file header
         self.__crc = 0
         self.__compression_method = compression_method or consts.NO_COMPRESSION
-        self.__flags = (
-            0b00001000  # flag about using data descriptor is always on
-        )
+        self.__flags = 0b00001000  # flag about using data descriptor is always on
 
     def __str__(self):
         return f"FILE[{self.name}]"
 
     def generate_processed_file_data(self) -> Generator[bytes, None, None]:
         if self.__used:
-            raise KeyError(
-                "ERROR: This file has already been used for streaming",
-            )
+            raise KeyError("ERROR: This file has already been used for streaming")
         self.__used = True
         compressor = Compressor(self)
 
@@ -43,9 +39,7 @@ class BaseFile(ABC):
         self,
     ) -> AsyncGenerator[bytes, None]:
         if self.__used:
-            raise KeyError(
-                "ERROR: This file has already been used for streaming",
-            )
+            raise KeyError("ERROR: This file has already been used for streaming")
         self.__used = True
 
         compressor = Compressor(self)
