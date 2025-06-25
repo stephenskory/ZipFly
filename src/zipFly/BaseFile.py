@@ -1,6 +1,6 @@
 import time
 from abc import ABC, abstractmethod
-from typing import Generator, AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 from . import consts
 from .Compressor import Compressor
@@ -28,14 +28,16 @@ class BaseFile(ABC):
         Generates compressed file data
         """
         for chunk in self._generate_file_data():
-            chunk = compressor.process(chunk)
+            chunk = compressor.process(chunk)  # noqa: PLW2901
             if len(chunk) > 0:
                 yield chunk
-            chunk = compressor.tail()
-            if len(chunk) > 0:
-                yield chunk
+        chunk = compressor.tail()
+        if len(chunk) > 0:
+            yield chunk
 
-    async def async_generate_processed_file_data(self) -> AsyncGenerator[bytes, None]:
+    async def async_generate_processed_file_data(
+        self,
+    ) -> AsyncGenerator[bytes, None]:
         if self.__used:
             raise KeyError("ERROR: This file has already been used for streaming")
         self.__used = True
@@ -49,9 +51,9 @@ class BaseFile(ABC):
             chunk = compressor.process(chunk)
             if len(chunk) > 0:
                 yield chunk
-            chunk = compressor.tail()
-            if len(chunk) > 0:
-                yield chunk
+        chunk = compressor.tail()
+        if len(chunk) > 0:
+            yield chunk
 
     def get_mod_time(self) -> int:
         # Extract hours, minutes, and seconds from the modification time

@@ -167,7 +167,16 @@ I created this library for my I Drive project.
 
 If you have a different use case scenario, and LocalFile and GenFile are not enough, you can extend BaseFile and everything else should work out of the box.
 
+### Testing
 
+With [pytest](https://docs.pytest.org/en/stable/) and
+[pytest-asyncio](https://pytest-asyncio.readthedocs.io/en/stable/) installed,
+call `pytest` from the top-level directory (same as this `README.md`)
+to run tests.
+The 4GB tests are slow. If your machine has enough memory (~4GB free) and a fast
+disk/SSD, [pytest-xdist](https://pytest-xdist.readthedocs.io/en/stable/)
+can speed things up by running tests in parallel.
+Use it by calling `pytest -n auto`.
 
 ### PS
 
