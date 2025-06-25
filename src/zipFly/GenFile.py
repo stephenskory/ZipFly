@@ -10,7 +10,7 @@ class GenFile(BaseFile):
         self._name = name
         self._generator_func = generator
         self._size = size
-        self._crc = crc
+        self._overriden_crc = crc  # used in byte offset mode
         self._modification_time = modification_time if modification_time else time.time()
 
     def _get_generator(self):
@@ -50,6 +50,7 @@ class GenFile(BaseFile):
         self._name = new_name
 
     def calculate_crc(self) -> int:
-        if self._crc:
-            return self._crc
+        if self._overriden_crc:
+            print(self._overriden_crc)
+            return self._overriden_crc
         raise ValueError("Crc must be explicitly set to allow for byte offset streaming!")

@@ -1,20 +1,23 @@
 import os
-import time
 import zlib
-from typing import Generator, AsyncGenerator
-from .BaseFile import BaseFile
-import binascii
+from pathlib import Path
+from typing import Generator, AsyncGenerator, Union
 
 import aiofiles
 
+from .BaseFile import BaseFile
+
+
 class LocalFile(BaseFile):
 
-    def __init__(self, file_path: str, name: str = None, compression_method: int = None, chunk_size=None):
-        if not os.path.isfile(file_path):
+    def __init__(self, file_path: Union[str, Path], name: str = None, compression_method: int = None, chunk_size=None):
+        file_path = Path(file_path)
+        if not file_path.is_file():
             raise ValueError(f"{file_path} is not a correct file path.")
-        self._file_path = file_path
+
+        self._file_path = str(file_path)
         self.chunk_size = chunk_size
-        self._name = name if name else file_path
+        self._name = name if name else self._file_path
         super().__init__(compression_method)
 
     async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:

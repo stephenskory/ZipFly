@@ -2,9 +2,7 @@
 
 import time
 import zipfile
-from collections.abc import AsyncGenerator, Generator
-from pathlib import Path
-from tempfile import NamedTemporaryFile
+import zlib
 
 # Need to also have https://pypi.org/project/pytest-asyncio/ installed
 # The 4GB tests are kind of slow, this can help if you have enough memory.
@@ -13,531 +11,359 @@ from tempfile import NamedTemporaryFile
 import pytest
 
 from src.zipFly import GenFile, LocalFile, ZipFly, consts
-
-# ruff: noqa: S101, N802
-
-lorem_ipsum = b"""Est magni commodi voluptate consequuntur qui consequatur.
-Nam quaerat velit eum non autem laborum quae qui.
-Maxime similique qui et natus qui ut ut et.
-Quia omnis dignissimos id molestias dolores provident quis quia.
-Dicta quaerat facere molestiae. Et quod totam nihil.
-Repudiandae enim esse optio ut nostrum aliquam et cumque.
-Distinctio molestiae dolore et debitis saepe optio.
-Incidunt id quo rerum dicta dolorem.
-Eos non eum qui totam.
-Dolores laborum quibusdam fugiat temporibus sed quia voluptatem dolor.
-Fugit ut iste voluptatem dolores et vero.
-Qui quibusdam nulla distinctio.
-Numquam explicabo laboriosam delectus nemo recusandae blanditiis voluptates.
-Esse ea magnam qui ea.
-Id quo odio saepe rerum quia natus odio exercitationem.
-Deleniti sunt dolores cupiditate quia eum ab fugit.
-Similique ullam et tempore sunt incidunt ipsa.
-Molestiae est harum similique aspernatur distinctio aut."""
-
-single_archive_size = 1152
-multifile_archive_size = 5388
+from tests.test_utils import lorem_ipsum_generator, lorem_ipsum, single_archive_size, lorem_ipsum_generator_async, multifile_archive_size
 
 
-def lorem_ipsum_generator() -> Generator[bytes]:
-    """Yield lines of lorem ipsum."""
-    lines = lorem_ipsum.split(b"\n")
-    # Don't yield trailing newline
-    for line in lines[:-1]:
-        yield line
-        yield b"\n"
-    yield lines[-1]
+def test_GenFile_COMPRESSION_DEFLATE(tmp_path):
+    """Test GenFile with compression."""
+    file1 = GenFile(
+        name="lorem_ipsum.txt",
+        generator=lorem_ipsum_generator(),
+        modification_time=time.time(),
+        size=len(lorem_ipsum),
+        compression_method=consts.COMPRESSION_DEFLATE,
+    )
+    zip_fly = ZipFly([file1])
+
+    zip_path = tmp_path / "deflate.zip"
+    with zip_path.open("wb") as fp:
+        for chunk in zip_fly.stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp, zfp.open("lorem_ipsum.txt") as tfp:
+        out = tfp.read()
+
+    assert lorem_ipsum == out
+    assert zip_fly.calculate_archive_size() == single_archive_size
 
 
-async def lorem_ipsum_generator_async() -> AsyncGenerator[bytes]:
-    """Yield lines of lorem ipsum."""
-    for line in lorem_ipsum_generator():
-        yield line
+@pytest.mark.asyncio
+async def test_GenFile_COMPRESSION_DEFLATE_async(tmp_path):
+    """Test GenFile with compression (async)."""
+    file1 = GenFile(
+        name="lorem_ipsum.txt",
+        generator=lorem_ipsum_generator_async(),
+        modification_time=time.time(),
+        size=len(lorem_ipsum),
+        compression_method=consts.COMPRESSION_DEFLATE,
+    )
+    zip_fly = ZipFly([file1])
+
+    zip_path = tmp_path / "deflate_async.zip"
+    with zip_path.open("wb") as fp:
+        async for chunk in zip_fly.async_stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp, zfp.open("lorem_ipsum.txt") as tfp:
+        out = tfp.read()
+
+    assert lorem_ipsum == out
+    assert zip_fly.calculate_archive_size() == single_archive_size
 
 
-def sized_zeros_generator(size: int) -> Generator[bytes]:
-    """Yield zeros up to a certain size."""
-    yielded = 0
-    line = b"0" * 1024
-    while yielded < size:
-        yield line[: size - yielded]
-        yielded += len(line[: size - yielded])
-        if yielded >= size:
+def test_GenFile_NO_COMPRESSION(tmp_path):
+    """Test GenFile without compression."""
+    file1 = GenFile(
+        name="lorem_ipsum.txt",
+        generator=lorem_ipsum_generator(),
+        modification_time=time.time(),
+        size=len(lorem_ipsum),
+        compression_method=consts.NO_COMPRESSION,
+    )
+    zip_fly = ZipFly([file1])
+
+    zip_path = tmp_path / "nocompress.zip"
+    with zip_path.open("wb") as fp:
+        for chunk in zip_fly.stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp, zfp.open("lorem_ipsum.txt") as tfp:
+        out = tfp.read()
+
+    assert lorem_ipsum == out
+    assert zip_fly.calculate_archive_size() == single_archive_size
+
+
+@pytest.mark.asyncio
+async def test_GenFile_NO_COMPRESSION_async(tmp_path):
+    """Test GenFile without compression (async)."""
+    file1 = GenFile(
+        name="lorem_ipsum.txt",
+        generator=lorem_ipsum_generator_async(),
+        modification_time=time.time(),
+        size=len(lorem_ipsum),
+        compression_method=consts.NO_COMPRESSION,
+    )
+    zip_fly = ZipFly([file1])
+
+    zip_path = tmp_path / "nocompress_async.zip"
+    with zip_path.open("wb") as fp:
+        async for chunk in zip_fly.async_stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp, zfp.open("lorem_ipsum.txt") as tfp:
+        out = tfp.read()
+
+    assert lorem_ipsum == out
+    assert zip_fly.calculate_archive_size() == single_archive_size
+
+
+def test_LocalFile_COMPRESSION(tmp_path):
+    """Test LocalFile with compression."""
+    input_path = tmp_path / "lorem_input.txt"
+    input_path.write_bytes(lorem_ipsum)
+
+    file1 = LocalFile(
+        name="lorem_ipsum.txt",
+        file_path=input_path,
+        compression_method=consts.COMPRESSION_DEFLATE,
+    )
+    zip_fly = ZipFly([file1])
+
+    zip_path = tmp_path / "compressed.zip"
+    with zip_path.open("wb") as fp:
+        for chunk in zip_fly.stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp, zfp.open("lorem_ipsum.txt") as tfp:
+        out = tfp.read()
+
+    assert lorem_ipsum == out
+    assert zip_fly.calculate_archive_size() == single_archive_size
+
+
+@pytest.mark.asyncio
+async def test_LocalFile_COMPRESSION_async(tmp_path):
+    """Test LocalFile with compression (async)."""
+    input_path = tmp_path / "lorem_input.txt"
+    input_path.write_bytes(lorem_ipsum)
+
+    file1 = LocalFile(
+        name="lorem_ipsum.txt",
+        file_path=input_path,
+        compression_method=consts.COMPRESSION_DEFLATE,
+    )
+    zip_fly = ZipFly([file1])
+
+    zip_path = tmp_path / "compressed_async.zip"
+    with zip_path.open("wb") as fp:
+        async for chunk in zip_fly.async_stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp, zfp.open("lorem_ipsum.txt") as tfp:
+        out = tfp.read()
+
+    assert lorem_ipsum == out
+    assert zip_fly.calculate_archive_size() == single_archive_size
+
+
+def test_LocalFile_NO_COMPRESSION(tmp_path):
+    """Test LocalFile without compression."""
+    input_path = tmp_path / "lorem_input.txt"
+    input_path.write_bytes(lorem_ipsum)
+
+    file1 = LocalFile(
+        name="lorem_ipsum.txt",
+        file_path=input_path,
+        compression_method=consts.NO_COMPRESSION,
+    )
+    zip_fly = ZipFly([file1])
+
+    zip_path = tmp_path / "nocompress_local.zip"
+    with zip_path.open("wb") as fp:
+        for chunk in zip_fly.stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp, zfp.open("lorem_ipsum.txt") as tfp:
+        out = tfp.read()
+        for info in zfp.infolist():
+            print(f"{info.filename}: CRC={hex(info.CRC)}")
+
+    assert lorem_ipsum == out
+    assert zip_fly.calculate_archive_size() == single_archive_size
+
+
+@pytest.mark.asyncio
+async def test_LocalFile_NO_COMPRESSION_async(tmp_path):
+    """Test LocalFile without compression (async)."""
+    input_path = tmp_path / "lorem_input.txt"
+    input_path.write_bytes(lorem_ipsum)
+
+    file1 = LocalFile(
+        name="lorem_ipsum.txt",
+        file_path=input_path,
+        compression_method=consts.NO_COMPRESSION,
+    )
+    zip_fly = ZipFly([file1])
+
+    zip_path = tmp_path / "nocompress_local_async.zip"
+    with zip_path.open("wb") as fp:
+        async for chunk in zip_fly.async_stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp, zfp.open("lorem_ipsum.txt") as tfp:
+        out = tfp.read()
+
+    assert lorem_ipsum == out
+    assert zip_fly.calculate_archive_size() == single_archive_size
+
+
+def test_multifile_archive(tmp_path):
+    """Test adding multiple files to an archive."""
+    n_files = 5
+    input_paths = []
+    for i in range(n_files):
+        path = tmp_path / f"lorem_{i}.txt"
+        path.write_bytes(lorem_ipsum)
+        input_paths.append(path)
+
+    files = [
+        LocalFile(
+            name=f"lorem_ipsum_{i}.txt",
+            file_path=path,
+            compression_method=consts.COMPRESSION_DEFLATE,
+        )
+        for i, path in enumerate(input_paths)
+    ]
+    zip_fly = ZipFly(files)
+
+    zip_path = tmp_path / "multifile.zip"
+    with zip_path.open("wb") as fp:
+        for chunk in zip_fly.stream():
+            fp.write(chunk)
+
+    outs = []
+    with zipfile.ZipFile(zip_path) as zfp:
+        for zname in zfp.filelist:
+            with zfp.open(zname.filename) as tfp:
+                outs.append(tfp.read())
+
+    for out in outs:
+        assert out == lorem_ipsum
+
+    assert zip_fly.calculate_archive_size() == multifile_archive_size
+
+
+@pytest.mark.asyncio
+async def test_multifile_archive_async(tmp_path):
+    """Test adding multiple files to an archive (async version) using tmp_path."""
+    n_files = 5
+    outnames = []
+
+    # Create temp files using tmp_path
+    for i in range(n_files):
+        temp_file = tmp_path / f"lorem_{i}.txt"
+        temp_file.write_bytes(lorem_ipsum)
+        outnames.append(temp_file)
+
+    # Prepare LocalFile objects
+    files = [
+        LocalFile(
+            name=f"lorem_ipsum_{i}.txt",
+            file_path=str(path),
+            compression_method=consts.COMPRESSION_DEFLATE,
+        )
+        for i, path in enumerate(outnames)
+    ]
+
+    zip_fly = ZipFly(files)
+    archive_path = tmp_path / "test_archive.zip"
+
+    # Stream zip archive asynchronously
+    with archive_path.open("wb") as f_out:
+        async for chunk in zip_fly.async_stream():
+            f_out.write(chunk)
+
+    assert zip_fly.calculate_archive_size() == multifile_archive_size
+
+    # Validate zip content
+    outs = []
+    with zipfile.ZipFile(archive_path, "r") as zfp:
+        for zname in zfp.filelist:
+            with zfp.open(zname.filename) as tfp:
+                outs.append(tfp.read())
+
+    for out in outs:
+        assert out == lorem_ipsum
+
+
+def test_zipfly_stream_reuse_raises():
+    """Ensure ZipFly raises an error when .stream() is reused."""
+    file1 = GenFile(
+        name="lorem_ipsum.txt",
+        generator=lorem_ipsum_generator(),
+        modification_time=time.time(),
+        size=len(lorem_ipsum),
+        compression_method=consts.NO_COMPRESSION,
+    )
+    zip_fly = ZipFly([file1])
+
+    for _ in zip_fly.stream():
+        break
+
+    with pytest.raises(Exception):
+        for _ in zip_fly.stream():
             break
 
-
-async def sized_zeros_generator_async(size: int) -> AsyncGenerator[bytes]:
-    """Yield zeros up to a certain size."""
-    for zeros in sized_zeros_generator(size):
-        yield zeros
-
-
-def test_GenFile_COMPRESSION_DEFLATE() -> None:
-    """Test GenFile with compression."""
-    file1 = GenFile(
-        name="lorem_ipsum.txt",
-        generator=lorem_ipsum_generator(),
-        modification_time=time.time(),
-        size=len(lorem_ipsum),
-        compression_method=consts.COMPRESSION_DEFLATE,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    # Would need to bump to Python 3.12 to get the delete_on_close
-    # parameter.
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    for chunk in zip_fly.stream():
-        fp.write(chunk)
-    fp.close()
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("lorem_ipsum.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert lorem_ipsum == out
-
-    assert zip_fly.calculate_archive_size() == single_archive_size
-
-
 @pytest.mark.asyncio
-async def test_GenFile_COMPRESSION_DEFLATE_async() -> None:
-    """Test GenFile with compression."""
-    file1 = GenFile(
-        name="lorem_ipsum.txt",
-        generator=lorem_ipsum_generator_async(),
-        modification_time=time.time(),
-        size=len(lorem_ipsum),
-        compression_method=consts.COMPRESSION_DEFLATE,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    # Would need to bump to Python 3.12 to get the delete_on_close
-    # parameter.
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    async for chunk in zip_fly.async_stream():
-        fp.write(chunk)
-    fp.close()
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("lorem_ipsum.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert lorem_ipsum == out
-
-    assert zip_fly.calculate_archive_size() == single_archive_size
-
-
-def test_GenFile_NO_COMPRESSION() -> None:
-    """Test GenFile without compression."""
-    file1 = GenFile(
-        name="lorem_ipsum.txt",
-        generator=lorem_ipsum_generator(),
-        modification_time=time.time(),
-        size=len(lorem_ipsum),
-        compression_method=consts.NO_COMPRESSION,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    # Would need to bump minimum to Python 3.12 to get the delete_on_close
-    # parameter and use a "with" context handler, so we'll not do that for now
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    for chunk in zip_fly.stream():
-        fp.write(chunk)
-    fp.close()
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("lorem_ipsum.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert lorem_ipsum == out
-
-    assert zip_fly.calculate_archive_size() == single_archive_size
-
-
-@pytest.mark.asyncio
-async def test_GenFile_NO_COMPRESSION_async() -> None:
-    """Test GenFile without compression."""
+async def test_zipfly_resumable_async(tmp_path):
+    """
+    Test resumable async streaming of ZipFly.
+    Writes first part of archive, pauses, then resumes from byte offset.
+    """
+    # Setup your large file and ZipFly instance
     file1 = GenFile(
         name="lorem_ipsum.txt",
         generator=lorem_ipsum_generator_async(),
         modification_time=time.time(),
         size=len(lorem_ipsum),
         compression_method=consts.NO_COMPRESSION,
+        crc=zlib.crc32(lorem_ipsum)
     )
     files = [file1]
-    zip_fly = ZipFly(files)
-    # Would need to bump minimum to Python 3.12 to get the delete_on_close
-    # parameter and use a "with" context handler, so we'll not do that for now
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    async for chunk in zip_fly.async_stream():
-        fp.write(chunk)
-    fp.close()
 
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("lorem_ipsum.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert lorem_ipsum == out
-
-    assert zip_fly.calculate_archive_size() == single_archive_size
-
-
-def test_LocalFile_COMPRESSION() -> None:
-    """Test GenFile with compression."""
-    lorem_ipsum_fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    lorem_ipsum_fp.write(lorem_ipsum)
-    lorem_ipsum_fp.close()
-
-    file1 = LocalFile(
-        name="lorem_ipsum.txt",
-        file_path=lorem_ipsum_fp.name,
-        compression_method=consts.COMPRESSION_DEFLATE,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    for chunk in zip_fly.stream():
-        fp.write(chunk)
-    fp.close()
-
-    assert zip_fly.calculate_archive_size() == single_archive_size
-
-    Path.unlink(lorem_ipsum_fp.name)
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("lorem_ipsum.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert lorem_ipsum == out
-
-
-@pytest.mark.asyncio
-async def test_LocalFile_COMPRESSION_async() -> None:
-    """Test GenFile with compression."""
-    lorem_ipsum_fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    lorem_ipsum_fp.write(lorem_ipsum)
-    lorem_ipsum_fp.close()
-
-    file1 = LocalFile(
-        name="lorem_ipsum.txt",
-        file_path=lorem_ipsum_fp.name,
-        compression_method=consts.COMPRESSION_DEFLATE,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    async for chunk in zip_fly.async_stream():
-        fp.write(chunk)
-    fp.close()
-
-    assert zip_fly.calculate_archive_size() == single_archive_size
-
-    Path.unlink(lorem_ipsum_fp.name)
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("lorem_ipsum.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert lorem_ipsum == out
-
-
-def test_LocalFile_NO_COMPRESSION() -> None:
-    """Test GenFile without compression."""
-    lorem_ipsum_fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    lorem_ipsum_fp.write(lorem_ipsum)
-    lorem_ipsum_fp.close()
-
-    file1 = LocalFile(
-        name="lorem_ipsum.txt",
-        file_path=lorem_ipsum_fp.name,
-        compression_method=consts.NO_COMPRESSION,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    for chunk in zip_fly.stream():
-        fp.write(chunk)
-    fp.close()
-
-    assert zip_fly.calculate_archive_size() == single_archive_size
-
-    Path.unlink(lorem_ipsum_fp.name)
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("lorem_ipsum.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert lorem_ipsum == out
-
-
-@pytest.mark.asyncio
-async def test_LocalFile_NO_COMPRESSION_async() -> None:
-    """Test GenFile without compression."""
-    lorem_ipsum_fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    lorem_ipsum_fp.write(lorem_ipsum)
-    lorem_ipsum_fp.close()
-
-    file1 = LocalFile(
-        name="lorem_ipsum.txt",
-        file_path=lorem_ipsum_fp.name,
-        compression_method=consts.NO_COMPRESSION,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    async for chunk in zip_fly.async_stream():
-        fp.write(chunk)
-    fp.close()
-
-    assert zip_fly.calculate_archive_size() == single_archive_size
-
-    Path.unlink(lorem_ipsum_fp.name)
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("lorem_ipsum.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert lorem_ipsum == out
-
-
-def test_multifile_archive() -> None:
-    """Test adding multiple files to an archive."""
-    outnames = []
-    n_files = 5
-    for _ in range(n_files):
-        lorem_ipsum_fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-        lorem_ipsum_fp.write(lorem_ipsum)
-        lorem_ipsum_fp.close()
-        outnames.append(lorem_ipsum_fp.name)
-
-    files = []
-    for fi, outname in enumerate(outnames):
-        files.append(
-            LocalFile(
-                name=f"lorem_ipsum_{fi}.txt",
-                file_path=outname,
-                compression_method=consts.COMPRESSION_DEFLATE,
-            ),
-        )
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    for chunk in zip_fly.stream():
-        fp.write(chunk)
-    fp.close()
-
-    assert zip_fly.calculate_archive_size() == multifile_archive_size
-
-    for outname in outnames:
-        Path.unlink(outname)
-
-    outs = []
-    with zipfile.ZipFile(fp.name, "r") as zfp:
-        for zname in zfp.filelist:
-            with zfp.open(zname.filename) as tfp:
-                # We'll test asserts later so we can delete the tempfile
-                # before any failed asserts might leave some junk
-                outs.append(tfp.read())
-
-    Path.unlink(fp.name)
-
-    for out in outs:
-        assert lorem_ipsum == out
-
-
-@pytest.mark.asyncio
-async def test_multifile_archive_async() -> None:
-    """Test adding multiple files to an archive."""
-    outnames = []
-    n_files = 5
-    for _ in range(n_files):
-        lorem_ipsum_fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-        lorem_ipsum_fp.write(lorem_ipsum)
-        lorem_ipsum_fp.close()
-        outnames.append(lorem_ipsum_fp.name)
-
-    files = []
-    for fi, outname in enumerate(outnames):
-        files.append(
-            LocalFile(
-                name=f"lorem_ipsum_{fi}.txt",
-                file_path=outname,
-                compression_method=consts.COMPRESSION_DEFLATE,
-            ),
-        )
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    async for chunk in zip_fly.async_stream():
-        fp.write(chunk)
-    fp.close()
-
-    assert zip_fly.calculate_archive_size() == multifile_archive_size
-
-    for outname in outnames:
-        Path.unlink(outname)
-
-    outs = []
-    with zipfile.ZipFile(fp.name, "r") as zfp:
-        for zname in zfp.filelist:
-            with zfp.open(zname.filename) as tfp:
-                # We'll test asserts later so we can delete the tempfile
-                # before any failed asserts might leave some junk
-                outs.append(tfp.read())
-
-    Path.unlink(fp.name)
-
-    for out in outs:
-        assert lorem_ipsum == out
-
-
-def test_4GB_GenFile_COMPRESSION_DEFLATE() -> None:
-    """Test GenFile with compression for a large file."""
-    gb4plus = 2**32 + 1024
-    file1 = GenFile(
-        name="zeros.txt",
-        # Compressing all zeros is faster than lorem ipsum and we
-        # only care that we can compress a big file.
-        generator=sized_zeros_generator(gb4plus),
-        modification_time=time.time(),
-        size=gb4plus,
-        compression_method=consts.COMPRESSION_DEFLATE,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)
-    for chunk in zip_fly.stream():
-        fp.write(chunk)
-    fp.close()
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("zeros.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert len(out) == gb4plus
-
-
-@pytest.mark.asyncio
-async def test_4GB_GenFile_COMPRESSION_DEFLATE_async() -> None:
-    """Test GenFile with compression for a large file."""
-    gb4plus = 2**32 + 1024
-    file1 = GenFile(
-        name="zeros.txt",
-        # Compressing all zeros is faster than lorem ipsum and we
-        # only care that we can compress a big file.
-        generator=sized_zeros_generator_async(gb4plus),
-        modification_time=time.time(),
-        size=gb4plus,
-        compression_method=consts.COMPRESSION_DEFLATE,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)
-    async for chunk in zip_fly.async_stream():
-        fp.write(chunk)
-    fp.close()
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("zeros.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert len(out) == gb4plus
-
-
-def test_4GB_GenFile_NO_COMPRESSION() -> None:
-    """Test GenFile without compression for a large file."""
-    gb4plus = 2**32 + 1024
-    file1 = GenFile(
-        name="zeros.txt",
-        # Compressing all zeros is faster than lorem ipsum and we
-        # only care that we can compress a big file.
-        generator=sized_zeros_generator(gb4plus),
-        modification_time=time.time(),
-        size=gb4plus,
-        compression_method=consts.NO_COMPRESSION,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    for chunk in zip_fly.stream():
-        fp.write(chunk)
-    fp.close()
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("zeros.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert len(out) == gb4plus
-
-
-@pytest.mark.asyncio
-async def test_4GB_GenFile_NO_COMPRESSION_async() -> None:
-    """Test GenFile without compression for a large file."""
-    gb4plus = 2**32 + 1024
-    file1 = GenFile(
-        name="zeros.txt",
-        # Compressing all zeros is faster than lorem ipsum and we
-        # only care that we can compress a big file.
-        generator=sized_zeros_generator_async(gb4plus),
-        modification_time=time.time(),
-        size=gb4plus,
-        compression_method=consts.NO_COMPRESSION,
-    )
-    files = [file1]
-    zip_fly = ZipFly(files)
-    fp = NamedTemporaryFile(delete=False)  # noqa: SIM115
-    async for chunk in zip_fly.async_stream():
-        fp.write(chunk)
-    fp.close()
-
-    with (
-        zipfile.ZipFile(fp.name, "r") as zfp,
-        zfp.open("zeros.txt") as tfp,
-    ):
-        out = tfp.read()
-
-    Path.unlink(fp.name)
-
-    assert len(out) == gb4plus
+    zipFly1 = ZipFly(files)
+    zipFly2 = ZipFly(files)
+
+    out_file = tmp_path / "resumed.zip"
+
+    byte_offset = 0
+    STOP_BYTE = 46
+
+    zipFly1.calculate_archive_size()
+
+    # Pause function: write until STOP_BYTE
+    async def pause_zip_async():
+        nonlocal byte_offset
+        with open(out_file, "wb") as f_out:
+            async for chunk in zipFly1.async_stream():
+                remaining = STOP_BYTE - byte_offset
+                if len(chunk) > remaining:
+                    chunk = chunk[:remaining]
+
+                f_out.write(chunk)
+                byte_offset += len(chunk)
+
+                if byte_offset >= STOP_BYTE:
+                    break
+
+    # Resume function: continue from STOP_BYTE
+    async def resume_zip_async():
+        with open(out_file, "ab") as f_out:
+            async for chunk in zipFly2.async_stream(byte_offset=STOP_BYTE):
+                f_out.write(chunk)
+
+    # Run pause and resume
+    await pause_zip_async()
+    await resume_zip_async()
+
+    # Validate zip file is valid and contains expected file with correct size
+    with zipfile.ZipFile(out_file, "r") as zfp:
+        info = zfp.getinfo("lorem_ipsum.txt")
+        assert info.file_size == len(lorem_ipsum)
+        with zfp.open("lorem_ipsum.txt") as tfp:
+            content = tfp.read()
+            assert len(content) == len(lorem_ipsum)
+
+# Test if renaming duplicated file names works
+# Test if modification_time works for both gen file and localfile

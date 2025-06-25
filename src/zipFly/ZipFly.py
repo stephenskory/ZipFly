@@ -20,6 +20,9 @@ class ZipFly(ZipBase):
         self._remaining_offset = 0
         self.__used = False
 
+    def was_used(self) -> bool:
+        return self.__used
+
     def calculate_archive_size(self) -> int:
         """Calculates total archive size. Raises an error if it can't"""
         total_size = 0
@@ -40,7 +43,7 @@ class ZipFly(ZipBase):
         block_size = 0
 
         local_file_header_size = self._LOCAL_FILE_HEADER_SIZE + len(file.file_path_bytes)
-
+        print(f"local file header: {local_file_header_size}")
         block_size += local_file_header_size
         block_size += file.size
         block_size += self._DATA_DESCRIPTOR_SIZE
@@ -66,14 +69,17 @@ class ZipFly(ZipBase):
             file.set_offset(running_offset)
 
             if running_offset <= byte_offset < running_offset + file_size_in_archive:
+                print("aaaaaa")
+                print(f"index: {index}")
+                print(f"offset: {byte_offset - running_offset}")
                 return index, byte_offset - running_offset
+
+            # We must set both crc and compressed size for the files in the archive that we entirely "skip"
+            file.set_crc(file.calculate_crc())
+            file.set_compressed_size(file.size)
 
             if file.compression_method != consts.NO_COMPRESSION:
                 raise ValueError("Byte offset is supported only for non compressed files")
-
-            # We must set both crc and compressed size for the files in the archive that we "skip"
-            file.set_crc(file.calculate_crc())
-            file.set_compressed_size(file.size)
 
             running_offset += file_size_in_archive
 
@@ -82,11 +88,11 @@ class ZipFly(ZipBase):
     def _make_end_structures(self) -> Generator[bytes, None, None]:
         """
         Make zip64 end structures, which include:
-            central directory file header for every file\n
-            zip64 extra field for every file\n
-            zip64 end of central dir record\n
-            zip64 end of central dir locator\n
-            end of central dir record\n
+            central directory file header for every file
+            zip64 extra field for every file
+            zip64 end of central dir record
+            zip64 end of central dir locator
+            end of central dir record
         """
         # Save offset to start of central dir for zip64 end of cdir record
         self._offset_to_start_of_central_dir = self._get_offset()
@@ -167,7 +173,7 @@ class ZipFly(ZipBase):
 
     def _check_if_can_stream(self):
         if self.__used:
-            raise KeyError("You cannot call stream twice!")
+            raise RuntimeError("You cannot call stream twice!")
         self.__used = True
 
     def _apply_remaining_offset(self, data):

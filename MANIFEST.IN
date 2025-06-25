@@ -1,1 +1,2 @@
 exclude .gitignore
+exclude dev-requirements.txt
