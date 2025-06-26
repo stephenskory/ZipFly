@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    uses: ./.github/workflows/run-all-tests.yml
+
   deploy:
     runs-on: ubuntu-latest
 
