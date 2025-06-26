@@ -1,21 +1,22 @@
 import time
 from typing import Generator, AsyncGenerator, Union
+
+from . import consts
 from .BaseFile import BaseFile
 
 
 class GenFile(BaseFile):
-
-    def __init__(self, name: str, generator: Union[Generator[bytes, None, None], AsyncGenerator[bytes, None]], compression_method: int = None, modification_time: float = None, size: int = None, crc: int = None):
+    """DO NOT REUSE GenFile instances!"""
+    def __init__(self, name: str, generator: Union[Generator[bytes, None, None], AsyncGenerator[bytes, None]], compression_method: int = consts.NO_COMPRESSION, modification_time: float = None, size: int = None, crc: int = None):
         super().__init__(compression_method)
         self._name = name
-        self._generator_func = generator
+        self._generator = generator
         self._size = size
         self._overriden_crc = crc  # used in byte offset mode
         self._modification_time = modification_time if modification_time else time.time()
 
     def _get_generator(self):
-        """Return a new generator instance every time this is called."""
-        return self._generator_func
+        return self._generator
 
     def _generate_file_data(self) -> Generator[bytes, None, None]:
         generator = self._get_generator()
@@ -40,7 +41,7 @@ class GenFile(BaseFile):
     def size(self) -> int:
         if self._size is not None:
             return self._size
-        raise ValueError("Archive size not known before streaming. Probably GenFile() is missing size attribute.")
+        raise RuntimeError("Archive size not known before streaming. Probably GenFile() is missing size attribute.")
 
     @property
     def modification_time(self) -> float:
@@ -51,6 +52,5 @@ class GenFile(BaseFile):
 
     def calculate_crc(self) -> int:
         if self._overriden_crc:
-            print(self._overriden_crc)
             return self._overriden_crc
         raise ValueError("Crc must be explicitly set to allow for byte offset streaming!")

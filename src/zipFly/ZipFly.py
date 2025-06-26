@@ -3,12 +3,77 @@ from typing import Generator, AsyncGenerator, Union
 from . import consts
 from .BaseFile import BaseFile
 from .ZipBase import ZipBase
+import copy
+import types
 
+def process_file_names(files) -> list[BaseFile]:
+    """Renames duplicated file names"""
+    seen_names = set()
+
+    for file in files:
+        # Split name
+        base, ext = file.name.rsplit('.', 1) if '.' in file.name else (file.name, '')
+        ext = f".{ext}" if ext else ""
+
+        candidate = base
+        counter = 0
+        new_name = f"{candidate}{ext}"
+
+        # Generate unique name
+        while new_name in seen_names:
+            counter += 1
+            candidate = f"{base} ({counter})"
+            new_name = f"{candidate}{ext}"
+
+        # Set unique name and mark it as seen
+        file.set_file_name(new_name)
+        seen_names.add(new_name)
+
+    return files
+
+
+def deepcopy_skip_generators(obj_list):
+    """
+    Deep copies a list of objects, skipping any object entirely
+    if it contains a generator or async generator as an attribute.
+    """
+
+    def has_generator(obj):
+        for value in getattr(obj, '__dict__', {}).values():
+            if isinstance(value, (types.GeneratorType, types.AsyncGeneratorType)):
+                return True
+        return False
+
+    def custom_copy(obj, memo=None):
+        if memo is None:
+            memo = {}
+
+        if isinstance(obj, dict):
+            return {k: custom_copy(v, memo) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple, set)):
+            return type(obj)(custom_copy(item, memo) for item in obj)
+        elif isinstance(obj, (int, float, str, bool, type(None))):  # Immutable types
+            return obj
+        elif isinstance(obj, (types.GeneratorType, types.AsyncGeneratorType)):  # Skip generators
+            return obj
+        elif hasattr(obj, '__dict__'):  # Handle custom objects
+            if has_generator(obj):
+                return obj  # or `return obj` to skip deepcopy but keep it in the list
+            new_obj = copy.copy(obj)  # Shallow copy first
+            for key, value in obj.__dict__.items():
+                setattr(new_obj, key, custom_copy(value, memo))
+            return new_obj
+        else:
+            return copy.deepcopy(obj, memo)  # Default deep copy
+
+    return [custom_copy(obj) for obj in obj_list]
 
 class ZipFly(ZipBase):
 
     def __init__(self, files: list[BaseFile]):
-        super().__init__(files)
+        processed_files = process_file_names(deepcopy_skip_generators(files))
+        super().__init__(processed_files)
+
         self._LOCAL_FILE_HEADER_SIZE = 30
         self._DATA_DESCRIPTOR_SIZE = 24
         self._CENTRAL_DIR_HEADER_SIZE = 46
@@ -43,7 +108,6 @@ class ZipFly(ZipBase):
         block_size = 0
 
         local_file_header_size = self._LOCAL_FILE_HEADER_SIZE + len(file.file_path_bytes)
-        print(f"local file header: {local_file_header_size}")
         block_size += local_file_header_size
         block_size += file.size
         block_size += self._DATA_DESCRIPTOR_SIZE
@@ -57,6 +121,8 @@ class ZipFly(ZipBase):
         Raises:
             ValueError
         """
+        if not byte_offset:  # skip if not using byte_offset mode
+            return 0, 0
 
         if byte_offset > self.calculate_archive_size():
             raise ValueError("Byte offset > total archive size")
@@ -69,9 +135,6 @@ class ZipFly(ZipBase):
             file.set_offset(running_offset)
 
             if running_offset <= byte_offset < running_offset + file_size_in_archive:
-                print("aaaaaa")
-                print(f"index: {index}")
-                print(f"offset: {byte_offset - running_offset}")
                 return index, byte_offset - running_offset
 
             # We must set both crc and compressed size for the files in the archive that we entirely "skip"
@@ -173,11 +236,10 @@ class ZipFly(ZipBase):
 
     def _check_if_can_stream(self):
         if self.__used:
-            raise RuntimeError("You cannot call stream twice!")
+            raise RuntimeError("Do not re-use zipFly instances. Recreate it.")
         self.__used = True
 
     def _apply_remaining_offset(self, data):
-
         if self._remaining_offset == 0:
             return data
         data_length = len(data)

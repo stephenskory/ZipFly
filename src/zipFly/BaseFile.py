@@ -18,30 +18,28 @@ class BaseFile(ABC):
     def __str__(self):
         return f"FILE[{self.name}]"
 
-    def generate_processed_file_data(self) -> Generator[bytes, None, None]:
+    def _check_if_used(self):
         if self.__used:
-            raise KeyError("ERROR: This file has already been used for streaming")
+            raise RuntimeError("Do not re-use file instances. Recreate it.")
         self.__used = True
+
+    def generate_processed_file_data(self) -> Generator[bytes, None, None]:
+        self._check_if_used()
         compressor = Compressor(self)
 
         """
         Generates compressed file data
         """
         for chunk in self._generate_file_data():
-            chunk = compressor.process(chunk)  # noqa: PLW2901
+            chunk = compressor.process(chunk)
             if len(chunk) > 0:
                 yield chunk
         chunk = compressor.tail()
         if len(chunk) > 0:
             yield chunk
 
-    async def async_generate_processed_file_data(
-        self,
-    ) -> AsyncGenerator[bytes, None]:
-        if self.__used:
-            raise KeyError("ERROR: This file has already been used for streaming")
-        self.__used = True
-
+    async def async_generate_processed_file_data(self) -> AsyncGenerator[bytes, None]:
+        self._check_if_used()
         compressor = Compressor(self)
 
         """

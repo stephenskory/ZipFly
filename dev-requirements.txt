@@ -1,3 +1,6 @@
 pytest
 pytest-asyncio
 pytest-xdist
+build==1.2.2
+twine==5.1.1
+aiofiles==24.1.0

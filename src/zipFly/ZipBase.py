@@ -1,6 +1,3 @@
-import copy
-import types
-from collections import defaultdict
 from typing import List
 
 from . import consts
@@ -63,63 +60,10 @@ I hope, that i made it a bit more clear to anyone reading, including future me.
 """
 
 
-def process_file_names(files) -> list[BaseFile]:
-    name_counts = defaultdict(int)
-    for file in files:
-        # Split the name into base and extension
-        base, ext = file.name.rsplit('.', 1) if '.' in file.name else (file.name, '')
-
-        # Increment the count for this base name
-        name_counts[base] += 1
-
-        # Append the count to the base name if it's not the first occurrence
-        if name_counts[base] > 1:
-            new_base = f"{base} ({name_counts[base] - 1})"
-        else:
-            new_base = base
-
-        # Reassemble the filename
-        file.set_file_name(f"{new_base}.{ext}" if ext else new_base)
-
-    return files
-
-
-def deepcopy_skip_generators(obj_list):
-    """
-    Deep copies a list of objects while skipping generator attributes.
-    """
-
-    def custom_copy(obj, memo=None):
-        if memo is None:
-            memo = {}
-
-        if isinstance(obj, dict):
-            return {k: custom_copy(v, memo) for k, v in obj.items()}
-        elif isinstance(obj, (list, tuple, set)):
-            return type(obj)(custom_copy(item, memo) for item in obj)
-        elif isinstance(obj, (int, float, str, bool, type(None))):  # Immutable types
-            return obj
-        elif isinstance(obj, (types.GeneratorType, types.AsyncGeneratorType)):  # Skip generators
-            return obj
-        elif hasattr(obj, '__dict__'):  # Handle custom objects
-            new_obj = copy.copy(obj)  # Shallow copy first
-            for key, value in obj.__dict__.items():
-                setattr(new_obj, key, custom_copy(value, memo))
-            return new_obj
-        else:
-            return copy.deepcopy(obj, memo)  # Default deep copy
-
-    return [custom_copy(obj) for obj in obj_list]
-
-
 class ZipBase:
-
     def __init__(self, files: List[BaseFile]):
         self.__version_to_extract = 45
-
-        # process file names to make sure there are no duplicates
-        processed_files = process_file_names(deepcopy_skip_generators(files))
-        self.files = processed_files
+        self.files = files
 
         self.__offset = 0  # Tracks the current offset within the ZIP archive
         self._cdir_size = 0

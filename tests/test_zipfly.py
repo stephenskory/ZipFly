@@ -68,7 +68,6 @@ def test_GenFile_NO_COMPRESSION(tmp_path):
         generator=lorem_ipsum_generator(),
         modification_time=time.time(),
         size=len(lorem_ipsum),
-        compression_method=consts.NO_COMPRESSION,
     )
     zip_fly = ZipFly([file1])
 
@@ -92,7 +91,6 @@ async def test_GenFile_NO_COMPRESSION_async(tmp_path):
         generator=lorem_ipsum_generator_async(),
         modification_time=time.time(),
         size=len(lorem_ipsum),
-        compression_method=consts.NO_COMPRESSION,
     )
     zip_fly = ZipFly([file1])
 
@@ -165,7 +163,6 @@ def test_LocalFile_NO_COMPRESSION(tmp_path):
     file1 = LocalFile(
         name="lorem_ipsum.txt",
         file_path=input_path,
-        compression_method=consts.NO_COMPRESSION,
     )
     zip_fly = ZipFly([file1])
 
@@ -192,7 +189,6 @@ async def test_LocalFile_NO_COMPRESSION_async(tmp_path):
     file1 = LocalFile(
         name="lorem_ipsum.txt",
         file_path=input_path,
-        compression_method=consts.NO_COMPRESSION,
     )
     zip_fly = ZipFly([file1])
 
@@ -278,7 +274,7 @@ async def test_multifile_archive_async(tmp_path):
 
     # Validate zip content
     outs = []
-    with zipfile.ZipFile(archive_path, "r") as zfp:
+    with zipfile.ZipFile(archive_path) as zfp:
         for zname in zfp.filelist:
             with zfp.open(zname.filename) as tfp:
                 outs.append(tfp.read())
@@ -294,7 +290,6 @@ def test_zipfly_stream_reuse_raises():
         generator=lorem_ipsum_generator(),
         modification_time=time.time(),
         size=len(lorem_ipsum),
-        compression_method=consts.NO_COMPRESSION,
     )
     zip_fly = ZipFly([file1])
 
@@ -305,65 +300,257 @@ def test_zipfly_stream_reuse_raises():
         for _ in zip_fly.stream():
             break
 
+
+STOP_BYTE_VALUES = list(range(0, 2001, 50))
+
 @pytest.mark.asyncio
-async def test_zipfly_resumable_async(tmp_path):
-    """
-    Test resumable async streaming of ZipFly.
-    Writes first part of archive, pauses, then resumes from byte offset.
-    """
-    # Setup your large file and ZipFly instance
-    file1 = GenFile(
-        name="lorem_ipsum.txt",
-        generator=lorem_ipsum_generator_async(),
-        modification_time=time.time(),
-        size=len(lorem_ipsum),
-        compression_method=consts.NO_COMPRESSION,
-        crc=zlib.crc32(lorem_ipsum)
-    )
-    files = [file1]
+@pytest.mark.parametrize("STOP_BYTE", STOP_BYTE_VALUES)
+@pytest.mark.parametrize("file_cls", ["local", "gen"])
+async def test_zipfly_resumable_async(tmp_path, STOP_BYTE, file_cls):
+    out_file = tmp_path / f"{file_cls}_{STOP_BYTE}_resumed.zip"
+    byte_offset = 0
+    file_count = 2
+    files = []
+
+    # Create input files
+    for i in range(file_count):
+        name = f"lorem_{i}.txt"
+        if file_cls == "local":
+            data_path = tmp_path / f"file_{i}.txt"
+            data_path.write_bytes(lorem_ipsum)
+            file = LocalFile(
+                file_path=data_path,
+                name=name,
+            )
+        elif file_cls == "gen":
+            file = GenFile(
+                name=name,
+                generator=lorem_ipsum_generator_async(),
+                size=len(lorem_ipsum),
+                modification_time=time.time(),
+                crc=zlib.crc32(lorem_ipsum)
+            )
+        else:
+            raise ValueError("Unsupported file class")
+        files.append(file)
 
     zipFly1 = ZipFly(files)
-    zipFly2 = ZipFly(files)
 
-    out_file = tmp_path / "resumed.zip"
+    # If using GenFile, recreate generator objects for the resume ZipFly
+    if file_cls == "gen":
+        files_resume = [
+            GenFile(
+                name=f"lorem_{i}.txt",
+                generator=lorem_ipsum_generator_async(),
+                size=len(lorem_ipsum),
+                modification_time=time.time(),
+                crc=zlib.crc32(lorem_ipsum)
+            )
+            for i in range(file_count)
+        ]
+    else:
+        files_resume = files
 
-    byte_offset = 0
-    STOP_BYTE = 46
+    zipFly2 = ZipFly(files_resume)
 
-    zipFly1.calculate_archive_size()
-
-    # Pause function: write until STOP_BYTE
+    # Pause: write first part of the archive
     async def pause_zip_async():
         nonlocal byte_offset
         with open(out_file, "wb") as f_out:
             async for chunk in zipFly1.async_stream():
                 remaining = STOP_BYTE - byte_offset
+                if remaining <= 0:
+                    break
                 if len(chunk) > remaining:
                     chunk = chunk[:remaining]
-
                 f_out.write(chunk)
                 byte_offset += len(chunk)
-
                 if byte_offset >= STOP_BYTE:
                     break
 
-    # Resume function: continue from STOP_BYTE
+    # Resume: continue writing from STOP_BYTE
     async def resume_zip_async():
         with open(out_file, "ab") as f_out:
             async for chunk in zipFly2.async_stream(byte_offset=STOP_BYTE):
                 f_out.write(chunk)
 
-    # Run pause and resume
     await pause_zip_async()
     await resume_zip_async()
 
-    # Validate zip file is valid and contains expected file with correct size
-    with zipfile.ZipFile(out_file, "r") as zfp:
-        info = zfp.getinfo("lorem_ipsum.txt")
-        assert info.file_size == len(lorem_ipsum)
-        with zfp.open("lorem_ipsum.txt") as tfp:
-            content = tfp.read()
-            assert len(content) == len(lorem_ipsum)
+    # Validate archive
+    with zipfile.ZipFile(out_file) as zfp:
+        for i in range(file_count):
+            file_name = f"lorem_{i}.txt"
+            info = zfp.getinfo(file_name)
+            assert info.file_size == len(lorem_ipsum)
+            with zfp.open(file_name) as tfp:
+                content = tfp.read()
+                assert content == lorem_ipsum
 
-# Test if renaming duplicated file names works
-# Test if modification_time works for both gen file and localfile
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("file_cls", ["local", "gen"])
+async def test_zipfly_resumable_async_offset_exceeds_archive(tmp_path, file_cls):
+    file_count = 2
+    files = []
+
+    # Create input files
+    for i in range(file_count):
+        name = f"lorem_{i}.txt"
+        if file_cls == "local":
+            data_path = tmp_path / f"file_{i}.txt"
+            data_path.write_bytes(lorem_ipsum)
+            file = LocalFile(
+                file_path=data_path,
+                name=name,
+            )
+        elif file_cls == "gen":
+            file = GenFile(
+                name=name,
+                generator=lorem_ipsum_generator_async(),
+                size=len(lorem_ipsum),
+                modification_time=time.time(),
+                crc=zlib.crc32(lorem_ipsum)
+            )
+        else:
+            raise ValueError("Unsupported file class")
+        files.append(file)
+
+    zipFly = ZipFly(files)
+    archive_size = zipFly.calculate_archive_size()
+    invalid_offset = archive_size + 100  # wrong offset
+
+    # Prepare ZipFly with fresh generator objects if GenFile
+    if file_cls == "gen":
+        files_resume = [
+            GenFile(
+                name=f"lorem_{i}.txt",
+                generator=lorem_ipsum_generator_async(),
+                size=len(lorem_ipsum),
+                modification_time=time.time(),
+                crc=zlib.crc32(lorem_ipsum)
+            )
+            for i in range(file_count)
+        ]
+    else:
+        files_resume = files
+
+    zipFly_resume = ZipFly(files_resume)
+
+    with pytest.raises(ValueError):
+        async for _ in zipFly_resume.async_stream(byte_offset=invalid_offset):
+            pass  # Should not reach here
+
+
+@pytest.mark.asyncio
+async def test_genfile_reuse_raises():
+    file = GenFile(
+        name="test.txt",
+        generator=lorem_ipsum_generator_async(),  # async generator
+        size=len(lorem_ipsum),
+        modification_time=time.time(),
+        crc=zlib.crc32(lorem_ipsum),
+    )
+
+    zipFly = ZipFly([file])
+
+    # First usage should succeed
+    chunks = []
+    async for chunk in zipFly.async_stream():
+        chunks.append(chunk)
+
+    # Reuse same GenFile — should raise (due to exhausted generator)
+    zipFly_reuse = ZipFly([file])
+
+    with pytest.raises(RuntimeError, match="Do not re-use file instances. Recreate it."):
+        async for _ in zipFly_reuse.async_stream():
+            pass
+
+
+@pytest.mark.asyncio
+async def test_zipfly_instance_reuse_raises():
+    file = GenFile(generator=lorem_ipsum_generator_async(), name="UwU.txt")
+    zipFly = ZipFly([file])
+
+    # First use should succeed
+    async for _ in zipFly.async_stream():
+        break  # stream at least once
+
+    # Reuse should raise error (state was consumed)
+    with pytest.raises(RuntimeError, match="Do not re-use zipFly instances. Recreate it."):
+        async for _ in zipFly.async_stream():
+            pass
+
+def test_renaming_duplicated_file_names(tmp_path):
+    file_path = tmp_path / "lorem_input.txt"
+    file_path.write_bytes(lorem_ipsum)
+
+    file1 = LocalFile(
+        file_path=file_path,
+        name="same_name.txt"
+    )
+    file2 = LocalFile(
+        file_path=file_path,
+        name="same_name.txt"
+    )
+
+    file3 = LocalFile(
+        file_path=file_path,
+        name="same_name1.txt"
+    )
+
+    file4 = LocalFile(
+        file_path=file_path,
+        name="same_name (1).txt"
+    )
+
+    zip_path = tmp_path / "duplicate_names.zip"
+    zipfly = ZipFly([file1, file2, file3, file4])
+
+    with open(zip_path, "wb") as f:
+        for chunk in zipfly.stream():
+            f.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as z:
+        names = z.namelist()
+        assert "same_name.txt" in names
+        assert "same_name (1).txt" in names
+        assert "same_name1.txt" in names
+        assert "same_name (1) (1).txt" in names
+
+
+@pytest.mark.parametrize("file_cls", ["gen", "local"])
+def test_modification_time(tmp_path, file_cls):
+    test_time = time.time()
+    test_time_rounded = int(test_time)
+
+    name = "file.txt"
+
+    if file_cls == "gen":
+        file = GenFile(
+            name=name,
+            generator=lorem_ipsum_generator(),
+            size=len(lorem_ipsum),
+            modification_time=test_time,
+            crc=zlib.crc32(lorem_ipsum)
+        )
+    else:
+        file_path = tmp_path / name
+        file_path.write_bytes(lorem_ipsum)
+        file = LocalFile(
+            file_path=file_path,
+            name=name,
+        )
+
+    zip_path = tmp_path / f"{file_cls}_mtime.zip"
+    zipfly = ZipFly([file])
+
+    with open(zip_path, "wb") as f:
+        for chunk in zipfly.stream():
+            f.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zf:
+        info = zf.getinfo(name)
+        zip_time = time.mktime(info.date_time + (0, 0, -1))
+        # Round both for comparison due to zip format limitations (2s resolution)
+        assert abs(round(zip_time) - round(test_time_rounded)) <= 2

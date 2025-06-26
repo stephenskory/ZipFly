@@ -28,6 +28,7 @@ Generating ZIPs on-demand in a web server is a typical use case for zipFly.**
 - Only 1 dependency
 - Automatic detection and changing of duplicate names
 - `Zip64` format compatible files
+- **21.37%** test coverage
 
 
 This library is based upon [this library](https://github.com/kbbdy/zipstream) <sub>_(this library was a piece of work...)_<sub>
@@ -55,8 +56,7 @@ with open("out/file.zip", 'wb') as f_out:
     for chunk in zipFly.stream():
         f_out.write(chunk)
 ```
-> [!CAUTION]
-> You mustn't reuse `ZipFly` instances. They should be re-created everytime you call `stream()` or `async_stream()`
+
 
 ### Supports dynamically created files
 ```py
@@ -158,14 +158,22 @@ If resume ZipFly instance has diffrent files than pause ZipFly instance there wi
 > [!NOTE]  
 > For byte offset mode to work you must use `const.NO_COMPRESSION` and specify `crc` for `GenFile`
 
+> [!CAUTION]
+> You mustn't reuse `ZipFly` instances. They should be re-created everytime you call `stream()` or `async_stream()`
+
+> [!CAUTION]
+> You mustn't reuse `GenFile` instances. 
 
 ### Other
 Python is not optimized for async I/O operations, thus to speed up the async streaming the chunk_size is changed to 4MB, you can override this by passing chunksize as argument to LocalFile.
 
-
 I created this library for my [iDrive](https://github.com/pam-param-pam/I-Drive) project.
 
 If you have a different use case scenario, and LocalFile and GenFile are not enough, you can extend BaseFile and everything else should work out of the box.
+
+If you extend `BaseFile` keep in mind that `zipFly` attempts to "deepcopy" files. It will successfully 
+deepcopy `LocalFile`, so LocalFile instances can be re-used. However, it will completely skip deep-coping any file 
+instance that has a generator.
 
 ### Testing
 

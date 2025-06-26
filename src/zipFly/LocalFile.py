@@ -5,12 +5,12 @@ from typing import Generator, AsyncGenerator, Union
 
 import aiofiles
 
+from . import consts
 from .BaseFile import BaseFile
 
 
 class LocalFile(BaseFile):
-
-    def __init__(self, file_path: Union[str, Path], name: str = None, compression_method: int = None, chunk_size=None):
+    def __init__(self, file_path: Union[str, Path], name: str = None, compression_method: int = consts.NO_COMPRESSION, chunk_size=None):
         file_path = Path(file_path)
         if not file_path.is_file():
             raise ValueError(f"{file_path} is not a correct file path.")
