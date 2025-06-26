@@ -2,6 +2,7 @@ name: Run All Tests (incl. slow)
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   test_all:
