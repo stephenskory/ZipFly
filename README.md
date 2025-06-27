@@ -112,8 +112,11 @@ asyncio.run(save_zip_async())
 > [!TIP]
 > Use this with Byte Range header to allow for resumable zip streaming
 
-This mode allows to start generating archive from offset. It finds the file within that offset and starts streaming from it. Sadly it must fetch the entire file as otherwise a correct crc cannot be calculated.
-If you use `LocalFile` then it's not a problem as it can very fast go tru the entire local file and calculate crc. However, if u use a `GenFile` it still has to fetch the entire file with may take a while depending on the file's size.
+This mode allows to start generating archive from offset. It finds the file within that offset and starts streaming 
+from it. Sadly it must fetch the entire file as otherwise a correct crc cannot be calculated.
+If you use `LocalFile` then it's not a problem as it can very fast go tru the entire local file 
+and calculate crc. However, if u use a `GenFile` it still has to fetch the entire file which may take a while 
+depending on the file's size.
 
 ```py
 
@@ -153,7 +156,7 @@ async def pause_resume_save():
 
 asyncio.run(pause_resume_save())
 ```
-If resume ZipFly instance has diffrent files than pause ZipFly instance there will be a corrupted Zip file generated
+If resume ZipFly instance has different files than pause ZipFly instance there will be a corrupted Zip file generated
 
 > [!NOTE]  
 > For byte offset mode to work you must use `const.NO_COMPRESSION` and specify `crc` for `GenFile`
@@ -165,7 +168,7 @@ If resume ZipFly instance has diffrent files than pause ZipFly instance there wi
 > You mustn't reuse `GenFile` instances. 
 
 ### Other
-Python is not optimized for async I/O operations, thus to speed up the async streaming the chunk_size is changed to 4MB, you can override this by passing chunksize as argument to LocalFile.
+Python is not optimized for async I/O operations, thus to speed up the async streaming the chunk_size is changed to 4MB, you can override this by passing `chunksize` as argument to LocalFile.
 
 I created this library for my [iDrive](https://github.com/pam-param-pam/I-Drive) project.
 
