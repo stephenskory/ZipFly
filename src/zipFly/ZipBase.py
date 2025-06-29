@@ -1,7 +1,9 @@
+from abc import abstractmethod
 from typing import List
 
 from . import consts
 from .BaseFile import BaseFile
+from .consts import ZIP64_VERSION, VERSION_MADE_BY
 
 """
 Since the Official ZIP docs are terrible, here's a detailed structure of the zip this library builds. (pretty sure mine's just as bad lol)
@@ -62,13 +64,10 @@ I hope, that i made it a bit more clear to anyone reading, including future me.
 
 class ZipBase:
     def __init__(self, files: List[BaseFile]):
-        self.__version_to_extract = 45
-        self.files = files
-
-        self.__offset = 0  # Tracks the current offset within the ZIP archive
+        self._files = files
+        self._offset = 0  # Tracks the current offset within the ZIP archive
         self._cdir_size = 0
         self._offset_to_start_of_central_dir = 0
-        self.__version_made_by = 0x0A45  # Windows and ZIP version 45
 
     def _make_local_file_header(self, file: BaseFile) -> bytes:
         """
@@ -76,7 +75,7 @@ class ZipBase:
         """
         fields = {
             "signature": consts.LOCAL_FILE_HEADER_SIGNATURE,
-            "version_to_extract": self.__version_to_extract,
+            "version_to_extract": ZIP64_VERSION,
             "flags": file.flags,
             "compression_method": file.compression_method,
             "mod_time": file.get_mod_time(),
@@ -117,8 +116,8 @@ class ZipBase:
         """
         fields = {
             "signature": consts.CENTRAL_DIR_FILE_HEADER_SIGNATURE,
-            "version_made_by": self.__version_made_by,
-            "version_to_extract": self.__version_to_extract,
+            "version_made_by": VERSION_MADE_BY,
+            "version_to_extract": ZIP64_VERSION,
             "flags": file.flags,
             "compression_method": file.compression_method,
             "mod_time": file.get_mod_time(),
@@ -166,12 +165,12 @@ class ZipBase:
         fields = {
             "signature": consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_SIGNATURE,
             "size_of_zip64_end_of_cdir_record": 44,  # 44 bytes for the ZIP64 end of central directory record itself
-            "version_made_by": self.__version_made_by,
-            "version_to_extract": self.__version_to_extract,
+            "version_made_by": VERSION_MADE_BY,
+            "version_to_extract": ZIP64_VERSION,
             "number_of_this_disk": 0,
             "cd_start": 0,
-            "cd_entries_this_disk": len(self.files),
-            "cd_entries_total": len(self.files),
+            "cd_entries_this_disk": len(self._files),
+            "cd_entries_total": len(self._files),
             "cd_size": self._cdir_size,
             "cd_offset": self._offset_to_start_of_central_dir
         }
@@ -188,7 +187,7 @@ class ZipBase:
         fields = {
             "signature": consts.ZIP64_END_OF_CENTRAL_DIR_LOCATOR_SIGNATURE,
             "disk_with_zip64_end": 0,
-            "zip64_end_offset": self.__offset,
+            "zip64_end_offset": self._offset,
             "total_disks": 1
         }
 
@@ -206,8 +205,8 @@ class ZipBase:
             "signature": consts.END_OF_CENTRAL_DIR_RECORD_SIGNATURE,
             "number_of_this_disk": 0,
             "number_of_disk_with_start_central_dir": 0,
-            "total_entries_on_this_disk": len(self.files),
-            "total_entries_total": len(self.files),
+            "total_entries_on_this_disk": len(self._files),
+            "total_entries_total": len(self._files),
             "central_directory_size": 0xFFFFFFFF,
             "offset_of_central_directory": 0xFFFFFFFF,
             "comment_length": 0  # No comment
@@ -219,11 +218,18 @@ class ZipBase:
         return eocd
 
     def _set_offset(self, value: int) -> None:
-        self.__offset = value
+        self._offset = value
 
     def _add_offset(self, value: int) -> None:
-
-        self.__offset += value
+        self._offset += value
 
     def _get_offset(self) -> int:
-        return self.__offset
+        return self._offset
+
+    # @abstractmethod
+    # def _cleanup(self):
+    #     """Clean all data after streaming"""
+    #     self._files = None
+    #     self._offset = 0
+    #     self._cdir_size = 0
+    #     self._offset_to_start_of_central_dir = 0

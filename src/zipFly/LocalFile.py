@@ -17,12 +17,19 @@ class LocalFile(BaseFile):
 
         self._file_path = str(file_path)
         self.chunk_size = chunk_size
-        self._name = name if name else self._file_path
-        super().__init__(compression_method)
+        name = name if name else self._file_path
+        super().__init__(name, compression_method)
+
+    def __str__(self):
+        return f"LocalFile[name={self.name}]"
+
+    def __repr__(self):
+        return f"LocalFile({self.name})"
 
     async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:
         if not self.chunk_size:
             self.chunk_size = 1048 * 1048 * 4
+
         async with aiofiles.open(self._file_path, "rb") as fh:
             while True:
                 part = await fh.read(self.chunk_size)
@@ -42,10 +49,6 @@ class LocalFile(BaseFile):
                 yield chunk
 
     @property
-    def name(self) -> str:
-        return self._name
-
-    @property
     def size(self) -> int:
         return os.path.getsize(self._file_path)
 
@@ -54,10 +57,7 @@ class LocalFile(BaseFile):
         """Returns the modification time as a Unix timestamp"""
         return os.path.getmtime(self._file_path)
 
-    def set_file_name(self, new_name: str) -> None:
-        self._name = new_name
-
-    def calculate_crc(self) -> int:
+    def get_predicted_crc(self) -> int:
         crc = 0
         with open(self._file_path, "rb") as f:
             while chunk := f.read(self.chunk_size):

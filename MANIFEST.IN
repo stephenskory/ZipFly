@@ -1,2 +1,3 @@
 exclude .gitignore
 exclude dev-requirements.txt
+prune tests

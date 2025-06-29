@@ -3,6 +3,7 @@ import struct
 
 # ZIP CONSTANTS
 ZIP64_VERSION = 45
+VERSION_MADE_BY = 0x0A45  # Windows and ZIP version 45
 UTF8_FLAG = 0x800  # utf-8 filename encoding flag
 
 # ZIP COMPRESSION METHODS

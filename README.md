@@ -76,7 +76,7 @@ file2 = LocalFile(file_path='files/as61aade2ebfd.mp4', compression_method=consts
 files = [file1, file2]
 
 zipFly = ZipFly(files)
-archive_size = zipFly.calculate_archive_size() # raises ValueError if it can't calculate size
+archive_size = zipFly.calculate_archive_size() # raises RuntimeError if it can't calculate size
 
 # for example you can set as content length in http response
 response['Content-Length'] = archive_size
@@ -143,11 +143,11 @@ async def async_save_pause():
 file3 = GenFile(name="file.txt", generator=file_generator(), crc=crc)
 file4 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")
 files2 = [file3, file4]
-zipFly2 = ZipFly(files2)
+resumeZipFly = ZipFly(files2, byte_offset=STOP_BYTE)
 
 async def async_save_resume():
     with open("out/file.zip", 'ab') as f_out: # Append mode
-        async for chunk in zipFly2.async_stream(byte_offset=STOP_BYTE):
+        async for chunk in resumeZipFly.async_stream():
             f_out.write(chunk)
 
 async def pause_resume_save():

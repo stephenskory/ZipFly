@@ -68,9 +68,9 @@ def deepcopy_skip_generators(obj_list):
 
     return [custom_copy(obj) for obj in obj_list]
 
-class ZipFly(ZipBase):
 
-    def __init__(self, files: list[BaseFile]):
+class ZipFly(ZipBase):
+    def __init__(self, files: list[BaseFile], byte_offset: int = 0):
         processed_files = process_file_names(deepcopy_skip_generators(files))
         super().__init__(processed_files)
 
@@ -84,6 +84,13 @@ class ZipFly(ZipBase):
 
         self._remaining_offset = 0
         self.__used = False
+        self._byte_offset = byte_offset
+
+        # As the first thing: set byte_offset_mode = true
+        # for all files that may depend on it
+        if self._byte_offset is not None:
+            for file in self._files:
+                file.set_byte_offset_mode(True)
 
     def was_used(self) -> bool:
         return self.__used
@@ -92,7 +99,7 @@ class ZipFly(ZipBase):
         """Calculates total archive size. Raises an error if it can't"""
         total_size = 0
 
-        for file in self.files:
+        for file in self._files:
             total_size += self._calculate_file_size_in_archive(file)
             central_directory_header_size = self._CENTRAL_DIR_HEADER_SIZE + len(file.file_path_bytes) + self._ZIP64_EXTRA_FIELD_SIZE
             total_size += central_directory_header_size
@@ -114,39 +121,40 @@ class ZipFly(ZipBase):
 
         return block_size
 
-    def _find_starting_file(self, byte_offset: int) -> Union[tuple[int, int], tuple[None, int]]:
+    def _find_starting_file(self) -> Union[tuple[int, int], tuple[None, int]]:
         """This function is used in byte_offset mode. It finds the file in which byte offset is located.
         Returns:
             A tuple containing the index of the file and the offset within the file if found, otherwise tuple[None, remaining_offset].
         Raises:
             ValueError
         """
-        if not byte_offset:  # skip if not using byte_offset mode
+        if not self._byte_offset:  # skip if not using byte_offset mode
             return 0, 0
 
-        if byte_offset > self.calculate_archive_size():
+        if self._byte_offset > self.calculate_archive_size():
             raise ValueError("Byte offset > total archive size")
 
         running_offset = 0
-        for index, file in enumerate(self.files):
+        for index, file in enumerate(self._files):
+
             file_size_in_archive = self._calculate_file_size_in_archive(file)
 
             # We must set offset for files bcs the offset won't be handled by the usual parts of the code bcs we are skipping them later on
             file.set_offset(running_offset)
 
-            if running_offset <= byte_offset < running_offset + file_size_in_archive:
-                return index, byte_offset - running_offset
-
-            # We must set both crc and compressed size for the files in the archive that we entirely "skip"
-            file.set_crc(file.calculate_crc())
-            file.set_compressed_size(file.size)
+            if running_offset <= self._byte_offset < running_offset + file_size_in_archive:
+                return index, self._byte_offset - running_offset
 
             if file.compression_method != consts.NO_COMPRESSION:
                 raise ValueError("Byte offset is supported only for non compressed files")
 
+                # We must set both crc and compressed size for the files in the archive that we entirely "skip"
+            file.set_crc(file.get_predicted_crc())
+            file.set_compressed_size(file.size)
+
             running_offset += file_size_in_archive
 
-        return None, byte_offset - running_offset
+        return None, self._byte_offset - running_offset
 
     def _make_end_structures(self) -> Generator[bytes, None, None]:
         """
@@ -161,7 +169,7 @@ class ZipFly(ZipBase):
         self._offset_to_start_of_central_dir = self._get_offset()
 
         # Stream central directory entries
-        for file in self.files:
+        for file in self._files:
             chunk = self._make_cdir_file_header(file)
             chunk += self._make_zip64_extra_field(file)
             self._cdir_size += len(chunk)
@@ -197,16 +205,15 @@ class ZipFly(ZipBase):
 
         yield self._apply_remaining_offset(self._make_data_descriptor(file))
 
-    async def async_stream(self, byte_offset: int = 0) -> AsyncGenerator[bytes, None]:
+    async def async_stream(self) -> AsyncGenerator[bytes, None]:
         """Streams the entire archive asynchronously"""
         self._check_if_can_stream()
-
-        starting_file_index, remaining_offset = self._find_starting_file(byte_offset)
+        starting_file_index, remaining_offset = self._find_starting_file()
         self._remaining_offset = remaining_offset
 
-        self._set_offset(byte_offset - remaining_offset)
+        self._set_offset(self._byte_offset - remaining_offset)
         if starting_file_index is not None:
-            for file in self.files[starting_file_index:]:
+            for file in self._files[starting_file_index:]:
                 file.set_offset(self._get_offset())
                 async for chunk in self._async_stream_single_file(file):
                     self._add_offset(len(chunk))
@@ -216,15 +223,17 @@ class ZipFly(ZipBase):
         for chunk in self._make_end_structures():
             yield chunk
 
-    def stream(self, byte_offset: int = 0) -> Generator[bytes, None, None]:
+        # self._cleanup()
+
+    def stream(self) -> Generator[bytes, None, None]:
         self._check_if_can_stream()
 
-        starting_file_index, remaining_offset = self._find_starting_file(byte_offset)
+        starting_file_index, remaining_offset = self._find_starting_file()
         self._remaining_offset = remaining_offset
 
-        self._set_offset(byte_offset - remaining_offset)
+        self._set_offset(self._byte_offset - remaining_offset)
         if starting_file_index is not None:
-            for file in self.files[starting_file_index:]:
+            for file in self._files[starting_file_index:]:
                 file.set_offset(self._get_offset())
                 for chunk in self._stream_single_file(file):
                     self._add_offset(len(chunk))
@@ -233,6 +242,8 @@ class ZipFly(ZipBase):
         # stream zip structures
         for chunk in self._make_end_structures():
             yield chunk
+
+        # self._cleanup()
 
     def _check_if_can_stream(self):
         if self.__used:
@@ -255,3 +266,10 @@ class ZipFly(ZipBase):
         self._add_offset(self._remaining_offset)
         self._remaining_offset = 0  # Offset is fully applied
         return result
+
+    # def _cleanup(self):
+    #     pass
+    #     """Clean all data after streaming"""
+    #     super()._cleanup()
+    #     self._remaining_offset = 0
+    #     # self.__used = False

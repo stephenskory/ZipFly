@@ -7,16 +7,23 @@ from .Compressor import Compressor
 
 
 class BaseFile(ABC):
-    def __init__(self, compression_method: int):
+    def __init__(self, name: str, compression_method: int):
         self.__used = False
         self.__compressed_size = 0
         self.__offset = 0  # Offset to local file header
         self.__crc = 0
         self.__compression_method = compression_method or consts.NO_COMPRESSION
         self.__flags = 0b00001000  # flag about using data descriptor is always on
+        self.__byte_offset_mode = False
+        if name == "":
+            raise KeyError("File name cannot be blank.")
+        self._name = name
 
     def __str__(self):
-        return f"FILE[{self.name}]"
+        return f"BaseFile[name={self.name}]"
+
+    def __repr__(self):
+        return f"BaseFile({self.name})"
 
     def _check_if_used(self):
         if self.__used:
@@ -24,12 +31,10 @@ class BaseFile(ABC):
         self.__used = True
 
     def generate_processed_file_data(self) -> Generator[bytes, None, None]:
+        """Generates compressed file data"""
         self._check_if_used()
         compressor = Compressor(self)
 
-        """
-        Generates compressed file data
-        """
         for chunk in self._generate_file_data():
             chunk = compressor.process(chunk)
             if len(chunk) > 0:
@@ -39,12 +44,10 @@ class BaseFile(ABC):
             yield chunk
 
     async def async_generate_processed_file_data(self) -> AsyncGenerator[bytes, None]:
+        """Generates compressed file data"""
         self._check_if_used()
         compressor = Compressor(self)
 
-        """
-        Generates compressed file data
-        """
         async for chunk in self._async_generate_file_data():
             chunk = compressor.process(chunk)
             if len(chunk) > 0:
@@ -85,6 +88,15 @@ class BaseFile(ABC):
     def set_crc(self, new_crc) -> None:
         self.__crc = new_crc
 
+    def set_byte_offset_mode(self, value) -> None:
+        self.__byte_offset_mode = value
+
+    def is_byte_offset_mode(self) -> bool:
+        return self.__byte_offset_mode
+
+    def set_file_name(self, new_name: str) -> None:
+        self._name = new_name
+
     @property
     def file_path_bytes(self) -> bytes:
         try:
@@ -102,11 +114,7 @@ class BaseFile(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def set_file_name(self, new_name: str) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def calculate_crc(self) -> int:
+    def get_predicted_crc(self) -> int:
         raise NotImplementedError
 
     @property
@@ -118,12 +126,12 @@ class BaseFile(ABC):
         raise NotImplementedError
 
     @property
-    def name(self) -> str:
-        raise NotImplementedError
-
-    @property
     def flags(self) -> int:
         return self.__flags
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @property
     def compression_method(self) -> int:

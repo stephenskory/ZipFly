@@ -1,5 +1,5 @@
 """Run tests of ZipFly."""
-
+import re
 import time
 import zipfile
 import zlib
@@ -11,6 +11,7 @@ import zlib
 import pytest
 
 from src.zipFly import GenFile, LocalFile, ZipFly, consts
+from src.zipFly.EmptyFolder import EmptyFolder
 from tests.test_utils import lorem_ipsum_generator, lorem_ipsum, single_archive_size, lorem_ipsum_generator_async, multifile_archive_size
 
 
@@ -20,7 +21,6 @@ def test_GenFile_COMPRESSION_DEFLATE(tmp_path):
         name="lorem_ipsum.txt",
         generator=lorem_ipsum_generator(),
         modification_time=time.time(),
-        size=len(lorem_ipsum),
         compression_method=consts.COMPRESSION_DEFLATE,
     )
     zip_fly = ZipFly([file1])
@@ -34,7 +34,6 @@ def test_GenFile_COMPRESSION_DEFLATE(tmp_path):
         out = tfp.read()
 
     assert lorem_ipsum == out
-    assert zip_fly.calculate_archive_size() == single_archive_size
 
 
 @pytest.mark.asyncio
@@ -44,7 +43,6 @@ async def test_GenFile_COMPRESSION_DEFLATE_async(tmp_path):
         name="lorem_ipsum.txt",
         generator=lorem_ipsum_generator_async(),
         modification_time=time.time(),
-        size=len(lorem_ipsum),
         compression_method=consts.COMPRESSION_DEFLATE,
     )
     zip_fly = ZipFly([file1])
@@ -58,7 +56,6 @@ async def test_GenFile_COMPRESSION_DEFLATE_async(tmp_path):
         out = tfp.read()
 
     assert lorem_ipsum == out
-    assert zip_fly.calculate_archive_size() == single_archive_size
 
 
 def test_GenFile_NO_COMPRESSION(tmp_path):
@@ -351,7 +348,7 @@ async def test_zipfly_resumable_async(tmp_path, STOP_BYTE, file_cls):
     else:
         files_resume = files
 
-    zipFly2 = ZipFly(files_resume)
+    zipFly2 = ZipFly(files_resume, byte_offset=STOP_BYTE)
 
     # Pause: write first part of the archive
     async def pause_zip_async():
@@ -371,7 +368,7 @@ async def test_zipfly_resumable_async(tmp_path, STOP_BYTE, file_cls):
     # Resume: continue writing from STOP_BYTE
     async def resume_zip_async():
         with open(out_file, "ab") as f_out:
-            async for chunk in zipFly2.async_stream(byte_offset=STOP_BYTE):
+            async for chunk in zipFly2.async_stream():
                 f_out.write(chunk)
 
     await pause_zip_async()
@@ -435,10 +432,10 @@ async def test_zipfly_resumable_async_offset_exceeds_archive(tmp_path, file_cls)
     else:
         files_resume = files
 
-    zipFly_resume = ZipFly(files_resume)
+    zipFly_resume = ZipFly(files_resume, byte_offset=invalid_offset)
 
     with pytest.raises(ValueError):
-        async for _ in zipFly_resume.async_stream(byte_offset=invalid_offset):
+        async for _ in zipFly_resume.async_stream():
             pass  # Should not reach here
 
 
@@ -478,6 +475,44 @@ async def test_zipfly_instance_reuse_raises():
 
     # Reuse should raise error (state was consumed)
     with pytest.raises(RuntimeError, match="Do not re-use zipFly instances. Recreate it."):
+        async for _ in zipFly.async_stream():
+            pass
+
+
+@pytest.mark.asyncio
+async def test_zipfly_wrong_size_raises():
+    async def broken_gen():
+        yield b'abc'
+
+    file = GenFile(generator=broken_gen(), name="broken_size.txt", size=5)
+    zipFly = ZipFly([file])
+
+    with pytest.raises(RuntimeError, match=re.escape("Size(5) != streamed size(3)")):
+        async for _ in zipFly.async_stream():
+            pass
+
+
+@pytest.mark.asyncio
+async def test_zipfly_resumable_genfile_wrong_crc_raises(tmp_path):
+    """This will be raised"""
+    file_count = 2
+    files = []
+
+    # Create input files
+    for i in range(file_count):
+        file = GenFile(
+            name=f"lorem_{i}.txt",
+            generator=lorem_ipsum_generator_async(),
+            size=len(lorem_ipsum),
+            modification_time=time.time(),
+            crc=1
+        )
+
+        files.append(file)
+
+    zipFly = ZipFly(files)
+
+    with pytest.raises(RuntimeError, match=re.escape(f"Crc(1) != streamed crc({zlib.crc32(lorem_ipsum)})")):
         async for _ in zipFly.async_stream():
             pass
 
@@ -554,3 +589,31 @@ def test_modification_time(tmp_path, file_cls):
         zip_time = time.mktime(info.date_time + (0, 0, -1))
         # Round both for comparison due to zip format limitations (2s resolution)
         assert abs(round(zip_time) - round(test_time_rounded)) <= 2
+
+
+def test_EmptyFolder_creates_empty_directory(tmp_path):
+    folder_name = ""
+    empty_folder = EmptyFolder(name=folder_name)
+    zip_fly = ZipFly([empty_folder])
+
+    zip_path = tmp_path / "empty_folder.zip"
+    with zip_path.open("wb") as fp:
+        for chunk in zip_fly.stream():
+            fp.write(chunk)
+
+    # Ensure folder_name ends with '/'
+    if not folder_name.endswith('/'):
+        folder_name += '/'
+
+    with zipfile.ZipFile(zip_path) as zfp:
+        # Check that the folder entry is present in the zip
+        assert folder_name in zfp.namelist()
+
+        # Extract the ZipInfo for the folder and check if it is marked as a directory
+        info = zfp.getinfo(folder_name)
+        assert info.is_dir()  # True means it's a directory entry
+
+        # Reading the folder entry should yield empty content
+        with zfp.open(folder_name) as folder_file:
+            content = folder_file.read()
+            assert content == b""

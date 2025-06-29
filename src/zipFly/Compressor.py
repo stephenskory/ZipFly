@@ -12,6 +12,8 @@ class Compressor:
             self.compr = zlib.compressobj(5, zlib.DEFLATED, -15)
             self.process = self._process_deflate
             self.tail = self._tail_deflate
+        else:
+            raise KeyError("Unknown compression method in compressor")
 
     # no compression
     def _process_through(self, chunk):
