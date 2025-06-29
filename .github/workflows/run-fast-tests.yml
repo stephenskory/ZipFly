@@ -28,4 +28,4 @@ jobs:
 
       - name: Run fast tests only
         run: |
-          pytest -m "not slow" --maxfail=1 --disable-warnings -v
+          pytest -m "not slow" --disable-warnings -v

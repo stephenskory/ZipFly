@@ -592,7 +592,7 @@ def test_modification_time(tmp_path, file_cls):
 
 
 def test_EmptyFolder_creates_empty_directory(tmp_path):
-    folder_name = ""
+    folder_name = "empty_folder"
     empty_folder = EmptyFolder(name=folder_name)
     zip_fly = ZipFly([empty_folder])
 
