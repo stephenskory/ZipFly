@@ -1,18 +1,19 @@
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Generator
+from typing import Optional
 
 from . import consts
 from .Compressor import Compressor
 
 
 class BaseFile(ABC):
-    def __init__(self, name: str, compression_method: int):
+    def __init__(self, name: str, compression_method: int = consts.NO_COMPRESSION):
         self.__used = False
         self.__compressed_size = 0
         self.__offset = 0  # Offset to local file header
         self.__crc = 0
-        self.__compression_method = compression_method or consts.NO_COMPRESSION
+        self.__compression_method = compression_method
         self.__flags = 0b00001000  # flag about using data descriptor is always on
         self.__byte_offset_mode = False
         if name == "":

@@ -1,19 +1,20 @@
 import zlib
 
+from src.zipFly import consts
+
 
 class Compressor:
     def __init__(self, file: 'BaseFile'):
         self.file = file
-
-        if file.compression_method == 0:
+        if file.compression_method == consts.NO_COMPRESSION:  # no compression
             self.process = self._process_through
             self.tail = self._no_tail
-        elif file.compression_method == 8:  # deflate compression
+        elif file.compression_method == consts.COMPRESSION_DEFLATE:  # deflate compression
             self.compr = zlib.compressobj(5, zlib.DEFLATED, -15)
             self.process = self._process_deflate
             self.tail = self._tail_deflate
         else:
-            raise KeyError("Unknown compression method in compressor")
+            raise KeyError(f"Unknown compression method in compressor: {file.compression_method}")
 
     # no compression
     def _process_through(self, chunk):

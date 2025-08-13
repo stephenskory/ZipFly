@@ -1,10 +1,13 @@
-from typing import Generator, AsyncGenerator, Union
+import asyncio
+from typing import Generator, AsyncGenerator, Union, Optional
 
 from . import consts
 from .BaseFile import BaseFile
+from .FilePrefetcher import FilePrefetcher
 from .ZipBase import ZipBase
 import copy
 import types
+
 
 def process_file_names(files) -> list[BaseFile]:
     """Renames duplicated file names"""
@@ -185,7 +188,7 @@ class ZipFly(ZipBase):
         yield self._apply_remaining_offset(self._make_end_of_cdir_record())
 
     async def _async_stream_single_file(self, file: BaseFile) -> AsyncGenerator[bytes, None]:
-        """This function streams a single file, it also applies running_offset is needed"""
+        """This function streams a single file, it also applies remaining_offset if needed"""
 
         yield self._apply_remaining_offset(self._make_local_file_header(file))
 
@@ -225,6 +228,51 @@ class ZipFly(ZipBase):
 
         # self._cleanup()
 
+    async def async_stream_parallel(self, prefetch_files: int = 20, max_chunks_per_file: int = 2):
+        """
+        Stream files in parallel.
+        - prefetch_files: number of files' DATA to read ahead concurrently
+        - queue_maxsize: per-file buffered DATA chunks (backpressure)
+        """
+        self._check_if_can_stream()
+        start_idx, remaining_offset = self._find_starting_file()
+        self._remaining_offset = remaining_offset
+        self._set_offset(self._byte_offset - remaining_offset)
+
+        if start_idx is not None:
+
+            files = self._files[start_idx:]
+            prefetch_mgr = FilePrefetcher(files, prefetch_files, max_chunks_per_file)
+
+            for i, file in enumerate(files):
+                await prefetch_mgr.ensure_prefetch(i)
+
+                # 1) Local File Header
+                file.set_offset(self._get_offset())
+                header = self._make_local_file_header(file)
+                header = self._apply_remaining_offset(header)
+                self._add_offset(len(header))
+                if header:
+                    yield header
+
+                # 2) Stream DATA
+                async for chunk in prefetch_mgr.stream_file_data(i):
+                    out = self._apply_remaining_offset(chunk)
+                    if out:
+                        self._add_offset(len(out))
+                        yield out
+
+                # 3) Data Descriptor
+                dd = self._make_data_descriptor(file)
+                dd = self._apply_remaining_offset(dd)
+                self._add_offset(len(dd))
+                if dd:
+                    yield dd
+
+        # 4) Central directory & end records
+        for chunk in self._make_end_structures():
+            yield chunk
+
     def stream(self) -> Generator[bytes, None, None]:
         self._check_if_can_stream()
 
@@ -242,8 +290,6 @@ class ZipFly(ZipBase):
         # stream zip structures
         for chunk in self._make_end_structures():
             yield chunk
-
-        # self._cleanup()
 
     def _check_if_can_stream(self):
         if self.__used:
@@ -266,10 +312,3 @@ class ZipFly(ZipBase):
         self._add_offset(self._remaining_offset)
         self._remaining_offset = 0  # Offset is fully applied
         return result
-
-    # def _cleanup(self):
-    #     pass
-    #     """Clean all data after streaming"""
-    #     super()._cleanup()
-    #     self._remaining_offset = 0
-    #     # self.__used = False

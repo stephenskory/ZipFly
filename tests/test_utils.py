@@ -55,3 +55,9 @@ async def sized_zeros_generator_async(size: int) -> AsyncGenerator[bytes]:
     """Yield zeros up to a certain size."""
     for zeros in sized_zeros_generator(size):
         yield zeros
+
+def generate_data_async(data: bytes, repeat: int):
+    async def generator():
+        for _ in range(repeat):
+            yield data
+    return generator

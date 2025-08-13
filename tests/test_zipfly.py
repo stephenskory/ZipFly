@@ -12,8 +12,45 @@ import pytest
 
 from src.zipFly import GenFile, LocalFile, ZipFly, consts
 from src.zipFly.EmptyFolder import EmptyFolder
-from tests.test_utils import lorem_ipsum_generator, lorem_ipsum, single_archive_size, lorem_ipsum_generator_async, multifile_archive_size
+from tests.test_utils import lorem_ipsum_generator, lorem_ipsum, single_archive_size, lorem_ipsum_generator_async, multifile_archive_size, generate_data_async
 
+
+@pytest.mark.asyncio
+async def test_GenFile_multiple_files_async(tmp_path):
+    """Test async ZIP with multiple small files (~10KB each)."""
+    n = 10
+    chunk = b"x" * 1024  # 1KB
+    chunks_per_file = 10
+    expected_content = chunk * chunks_per_file
+
+    files = []
+    for i in range(n):
+        generator_func = generate_data_async(chunk, chunks_per_file)
+        file = GenFile(
+            name=f"file_{i}.txt",
+            generator=generator_func(),
+            modification_time=time.time(),
+            compression_method=consts.COMPRESSION_DEFLATE,
+        )
+        files.append(file)
+
+    zip_fly = ZipFly(files)
+    zip_path = tmp_path / "multi_file_async.zip"
+
+    with zip_path.open("wb") as fp:
+        async for zip_chunk in zip_fly.async_stream():
+            fp.write(zip_chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp:
+        namelist = zfp.namelist()
+        assert len(namelist) == n
+
+        for i in range(n):
+            fname = f"file_{i}.txt"
+            assert fname in namelist
+            with zfp.open(fname) as tfp:
+                data = tfp.read()
+                assert data == expected_content
 
 def test_GenFile_COMPRESSION_DEFLATE(tmp_path):
     """Test GenFile with compression."""

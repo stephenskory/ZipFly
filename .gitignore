@@ -3,3 +3,6 @@
 /out/
 /files/
 /dist/
+/.test-commands
+/tester2.py
+/.xtest/

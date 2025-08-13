@@ -167,6 +167,17 @@ If resume ZipFly instance has different files than pause ZipFly instance there w
 > [!CAUTION]
 > You mustn't reuse `GenFile` instances. 
 
+
+## Parallel async streaming
+
+If your `GenFile`'s rely on network requests to fetch data, network latency can limit throughput
+below the available bandwidth. To address this, I introduce `async_stream_parallel`.
+
+```python
+zipFly = ZipFly(files)
+zipFly.async_stream_parallel(prefetch_files=20, max_chunks_per_file=2)
+```
+
 ### Other
 Python is not optimized for async I/O operations, thus to speed up the async streaming the chunk_size is changed to 4MB, you can override this by passing `chunksize` as argument to LocalFile.
 
