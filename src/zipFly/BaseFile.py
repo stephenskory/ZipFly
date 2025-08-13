@@ -1,7 +1,6 @@
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Generator
-from typing import Optional
 
 from . import consts
 from .Compressor import Compressor

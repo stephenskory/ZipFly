@@ -1,4 +1,3 @@
-from abc import abstractmethod
 from typing import List
 
 from . import consts
@@ -6,7 +5,7 @@ from .BaseFile import BaseFile
 from .consts import ZIP64_VERSION, VERSION_MADE_BY
 
 """
-Since the Official ZIP docs are terrible, here's a detailed structure of the zip this library builds. (pretty sure mine's just as bad lol)
+Since the Official ZIP docs are terrible, here's a detailed structure of the zip this library builds. (Pretty sure mine's just as bad lol)
 
   [local file header 1]            |
   [file data 1]                    |
@@ -15,11 +14,11 @@ Since the Official ZIP docs are terrible, here's a detailed structure of the zip
   .                                } - This part of the of zip holds the file data. Local file headers are lowkey useless(nevertheless needed for zip to work).
   .                                |        Data descriptors allow to stream the file(and create file headers) without knowing the size of file data. Instead of putting
   [local file header n]            |        things like: CRC, uncompressed_size, compressed_size etc in file headers, you only put placeholder values there (0xFFFFFFFF),                                    
-  [file data n]                    |        and fill them later in data descriptor.
+  [file data n]                    |        and fill them later in data descriptor(after you have produced/gathered the file data, and actually know the file's metadata).
   [data descriptor n]              |
   
   
-  =================This part is called Central Directory Structure==============                               <------------ TO HERE -------------------------------------------<
+  ================= This part is called Central Directory Structure ==============                               <------------ TO HERE -----------------------------------------<
                                                                                                                                                                                 |
   [central directory header 1]     |                                                                                                                                            |
   [extra field 1]                  |                                                                                                                                            |
@@ -33,7 +32,7 @@ Since the Official ZIP docs are terrible, here's a detailed structure of the zip
                                             beginning of the file, to the start of local file header. So for 1st file the offset is 0, for the 2nd it's length of               |
                                             '[local file header 1]' + '[file data 1]' + '[data descriptor 1]'.                                                                  |
                                                                                                                                                                                 |
-  =================This part I call End of Central Directory Structure (It's still a part of cdir structure(I think))===============            <----- TO HERE -----------------|-----------<
+  ================= This part I call End of Central Directory Structure (It's still a part of cdir structure(I think)) ===============            <----- TO HERE ---------------|-----------<
                                                                                                                                                                                 |           |
   [zip64 end of central directory record]    |                                                                                                                                  |           |
   [zip64 end of central directory locator]   } - This is the actual end of the file. End of cdir directory record is a legacy(and kinda useless, nevertheless required).        |           |
@@ -41,24 +40,37 @@ Since the Official ZIP docs are terrible, here's a detailed structure of the zip
                                                     uncompressed_size, offset. We again use placeholder values, and put the actual ones in                                      |           |
                                                     'zip64 end of central directory record'. 'zip64 end of cdir locator' is used to locate the 'zip64 end of cdir record'.      |           |
                                                                                                                                                                                 |           |
-                                                    An important thing to pay attention to are **offsets*. There are two district ones here.                                    |           |
+                                                    An important thing to pay attention to are **offsets*. There are two distinct ones here.                                    |           |
                                                     1st offset is in 'zip64 end of cdir record'. It's the amount of bytes from the start of the file to start of   ------------->           |
                                                     *Central Directory Structure*.                                                                                                          |
                                                     2nd offset is in 'zip64 end of cdir locator'. It's the amount of bytes from the start of the file to start of -------------------------->
                                                     'zip64 end of cdir record'.
                                                     
-                                                    
+                                                                 
     Other goofy things are:
         'extra_field_len' in 'central directory header' is 28, even tho in the 'extra field' it self, the 'extra_field_size' is 24. That's because the first
         is the full length of the 'extra field' structure, while the second doesn't include 'extra_field_size' and
         'signature' which are each 2 bytes, so together they are the 'missing' 4 bytes.
         
-        'size_of_zip64_end_of_cdir_record' in zip64 end of cdir record is 44 bytes. Cuz: 'signature' - 4 bytes, 'size_of_zip64_end_of_central_dir_record' - 8 bytes,
-        'version_made_by' - 2 bytes, 'version_to_extract' - 2 bytes, 'number_of_this_disk' - 4 bytes, 'cd_start' - 4 bytes, 'cd_entries_this_disk' - 8 bytes, 
-        'cd_entries_total' - 8 bytes, 'cd_size' - 8 bytes, 'cd_offset' - 8 bytes.
+        'size_of_zip64_end_of_cdir_record' in zip64 end of cdir record is 44 bytes. Cuz: 'signature' = 4 bytes, 'size_of_zip64_end_of_central_dir_record' = 8 bytes,
+        'version_made_by' = 2 bytes, 'version_to_extract' = 2 bytes, 'number_of_this_disk' = 4 bytes, 'cd_start' = 4 bytes, 'cd_entries_this_disk' = 8 bytes, 
+        'cd_entries_total' = 8 bytes, 'cd_size' = 8 bytes, 'cd_offset' = 8 bytes.
         So, 4 + 8 + 2 + 2 + 4 + 4 + 8 + 8 + 8 + 8 = 56, but we again don't include signature, and 'size_of_zip64_end_of_central_dir_record' so 56 - 4 - 8 = 44
         
-I hope, that i made it a bit more clear to anyone reading, including future me.        
+        
+I hope, that i made it a bit more clear to anyone reading, including future me.
+Link to official docs: https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT   
+
+Local file header: Section 4.3.7
+File data: Section 4.3.8
+File descriptors: Section 4.3.9
+
+Central directory structure: Section 4.3.12
+Extra field (Archive extra data record): Section 4.3.11
+Zip64 end of central directory record: Section 4.3.14
+Zip64 end of central directory locator: Section 4.3.15
+End of central directory record: Section 4.3.16
+
 """
 
 
@@ -225,11 +237,3 @@ class ZipBase:
 
     def _get_offset(self) -> int:
         return self._offset
-
-    # @abstractmethod
-    # def _cleanup(self):
-    #     """Clean all data after streaming"""
-    #     self._files = None
-    #     self._offset = 0
-    #     self._cdir_size = 0
-    #     self._offset_to_start_of_central_dir = 0

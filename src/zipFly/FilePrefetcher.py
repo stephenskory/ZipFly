@@ -2,8 +2,6 @@ import asyncio
 from typing import List, Optional, AsyncGenerator
 
 class FilePrefetcher:
-    """Encapsulates a list of files, a sliding prefetch window, and streaming queues."""
-
     def __init__(self, files: List, prefetch_files: int = 20, queue_maxsize: int = 2):
         self.files = files
         self.prefetch_files = prefetch_files

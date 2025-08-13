@@ -1,12 +1,11 @@
-import asyncio
-from typing import Generator, AsyncGenerator, Union, Optional
+import copy
+import types
+from typing import Generator, AsyncGenerator, Union
 
 from . import consts
 from .BaseFile import BaseFile
 from .FilePrefetcher import FilePrefetcher
 from .ZipBase import ZipBase
-import copy
-import types
 
 
 def process_file_names(files) -> list[BaseFile]:
@@ -226,13 +225,11 @@ class ZipFly(ZipBase):
         for chunk in self._make_end_structures():
             yield chunk
 
-        # self._cleanup()
-
     async def async_stream_parallel(self, prefetch_files: int = 20, max_chunks_per_file: int = 2):
         """
         Stream files in parallel.
         - prefetch_files: number of files' DATA to read ahead concurrently
-        - queue_maxsize: per-file buffered DATA chunks (backpressure)
+        - max_chunks_per_file: per-file buffered DATA chunks (backpressure)
         """
         self._check_if_can_stream()
         start_idx, remaining_offset = self._find_starting_file()
