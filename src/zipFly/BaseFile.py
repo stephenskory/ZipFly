@@ -20,10 +20,10 @@ class BaseFile(ABC):
         self._name = name
 
     def __str__(self):
-        return f"BaseFile[name={self.name}]"
+        return f"BaseFile[name={self._name}]"
 
     def __repr__(self):
-        return f"BaseFile({self.name})"
+        return f"BaseFile({self._name})"
 
     def _check_if_used(self):
         if self.__used:

@@ -17,7 +17,6 @@ def test_4GB_GenFile_COMPRESSION_DEFLATE(tmp_path):
         name="zeros.txt",
         generator=sized_zeros_generator(gb4plus),
         modification_time=time.time(),
-        size=gb4plus,
         compression_method=consts.COMPRESSION_DEFLATE,
     )
     files = [file1]
@@ -43,7 +42,6 @@ async def test_4GB_GenFile_COMPRESSION_DEFLATE_async(tmp_path):
         name="zeros.txt",
         generator=sized_zeros_generator_async(gb4plus),
         modification_time=time.time(),
-        size=gb4plus,
         compression_method=consts.COMPRESSION_DEFLATE,
     )
     files = [file1]
@@ -69,7 +67,6 @@ def test_4GB_GenFile_NO_COMPRESSION(tmp_path):
         generator=sized_zeros_generator(gb4plus),
         modification_time=time.time(),
         size=gb4plus,
-        compression_method=consts.NO_COMPRESSION,
     )
     files = [file1]
     zip_fly = ZipFly(files)
@@ -95,7 +92,6 @@ async def test_4GB_GenFile_NO_COMPRESSION_async(tmp_path):
         generator=sized_zeros_generator_async(gb4plus),
         modification_time=time.time(),
         size=gb4plus,
-        compression_method=consts.NO_COMPRESSION,
     )
     files = [file1]
     zip_fly = ZipFly(files)
