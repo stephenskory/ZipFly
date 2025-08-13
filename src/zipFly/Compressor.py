@@ -1,6 +1,6 @@
 import zlib
 
-from src.zipFly import consts
+from . import consts
 
 
 class Compressor:
