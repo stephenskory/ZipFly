@@ -103,7 +103,6 @@ class BaseFile(ABC):
         try:
             return self.name.encode("ascii")
         except UnicodeError:
-            print("UNICOE ERROR")
             self.__flags |= consts.UTF8_FLAG
             return self.name.encode()
 
