@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator, Generator
 
 from . import consts
 from .Compressor import Compressor
+from .consts import DATA_DESCRIPTOR_FLAG
 
 
 class BaseFile(ABC):
@@ -13,7 +14,7 @@ class BaseFile(ABC):
         self.__offset = 0  # Offset to local file header
         self.__crc = 0
         self.__compression_method = compression_method
-        self.__flags = 0b00001000  # flag about using data descriptor is always on
+        self.__flags = DATA_DESCRIPTOR_FLAG  # flag about using data descriptor is always on
         self.__byte_offset_mode = False
         if name == "":
             raise KeyError("File name cannot be blank.")
@@ -102,8 +103,9 @@ class BaseFile(ABC):
         try:
             return self.name.encode("ascii")
         except UnicodeError:
+            print("UNICOE ERROR")
             self.__flags |= consts.UTF8_FLAG
-            return self.name.encode("utf-8")
+            return self.name.encode()
 
     @abstractmethod
     def _generate_file_data(self) -> Generator[bytes, None, None]:
@@ -127,6 +129,7 @@ class BaseFile(ABC):
 
     @property
     def flags(self) -> int:
+        _ = self.file_path_bytes  # trigger to set utf8 flag if needed
         return self.__flags
 
     @property

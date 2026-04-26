@@ -1,5 +1,6 @@
 """Run tests of ZipFly."""
 import re
+import struct
 import time
 import zipfile
 import zlib
@@ -654,3 +655,58 @@ def test_EmptyFolder_creates_empty_directory(tmp_path):
         with zfp.open(folder_name) as folder_file:
             content = folder_file.read()
             assert content == b""
+
+def _read_local_flags(data, offset):
+    return struct.unpack_from("<H", data, offset + 6)[0]
+
+
+def _read_central_flags(data, offset):
+    return struct.unpack_from("<H", data, offset + 8)[0]
+
+
+def test_non_ascii_file_names_utf8_flag(tmp_path):
+    file_path = tmp_path / "input.bin"
+    file_path.write_bytes(lorem_ipsum)
+
+    files = [
+        LocalFile(file_path=file_path, name="zażółć.txt"),
+        LocalFile(file_path=file_path, name="файл.txt"),
+        LocalFile(file_path=file_path, name="αρχείο.txt"),
+        LocalFile(file_path=file_path, name="ファイル.txt"),
+        LocalFile(file_path=file_path, name="文件.txt"),
+    ]
+
+    zip_path = tmp_path / "non_ascii_flags.zip"
+    zipfly = ZipFly(files)
+
+    with open(zip_path, "wb") as f:
+        for chunk in zipfly.stream():
+            f.write(chunk)
+
+    data = zip_path.read_bytes()
+
+    UTF8_FLAG = 0x0800
+
+    # --- scan local headers ---
+    offset = 0
+    while True:
+        sig = data.find(b"PK\x03\x04", offset)
+        if sig == -1:
+            break
+
+        flags = _read_local_flags(data, sig)
+        assert flags & UTF8_FLAG, f"UTF-8 flag missing in local header at {sig}"
+
+        offset = sig + 4
+
+    # --- scan central directory ---
+    offset = 0
+    while True:
+        sig = data.find(b"PK\x01\x02", offset)
+        if sig == -1:
+            break
+
+        flags = _read_central_flags(data, sig)
+        assert flags & UTF8_FLAG, f"UTF-8 flag missing in central dir at {sig}"
+
+        offset = sig + 4

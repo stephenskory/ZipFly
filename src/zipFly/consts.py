@@ -4,7 +4,8 @@ import struct
 # ZIP CONSTANTS
 ZIP64_VERSION = 45
 VERSION_MADE_BY = 0x0A45  # Windows and ZIP version 45
-UTF8_FLAG = 0x800  # utf-8 filename encoding flag
+UTF8_FLAG = 0x0800  # utf-8 filename encoding flag
+DATA_DESCRIPTOR_FLAG = 0x08  # flag that signalises that a data descriptor is used
 
 # ZIP COMPRESSION METHODS
 NO_COMPRESSION = 0
